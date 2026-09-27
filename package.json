@@ -14,6 +14,7 @@
     "node": ">=20"
   },
   "dependencies": {
+    "@goplus/sdk-node": "^0.0.8",
     "dotenv": "^17.2.2"
   },
   "devDependencies": {
