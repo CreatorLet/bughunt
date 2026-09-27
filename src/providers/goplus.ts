@@ -1,4 +1,4 @@
-import GoPlus from "@goplus/sdk-node";
+import { GoPlus } from "@goplus/sdk-node";
 import { config, requireGoPlusAppKey, requireGoPlusAppSecret } from "../config.js";
 import type { GoPlusTokenSecurity } from "../types.js";
 
