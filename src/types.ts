@@ -68,6 +68,7 @@ export interface FunctionSurface {
   name: string;
   kind:
     | "money-moving"
+    | "token-transfer"
     | "privileged"
     | "financial-state"
     | "external-execution";
