@@ -3,6 +3,7 @@ import path from "node:path";
 import { config } from "../config.js";
 import { analyzeWithDeepSeek } from "../analysis/deepseek.js";
 import { listBscProtocols } from "../providers/defillama.js";
+import { getRugpullSignals } from "../providers/goplus.js";
 import { researchContract } from "./research.js";
 import type {
   ContractResearch,
@@ -269,7 +270,9 @@ export async function runBscScan(options: {
     concurrency,
     async (candidate) => {
       try {
-        candidate.contract = await researchContract(candidate.address as string);
+        candidate.contract = await researchContract(candidate.address as string, {
+          includeRugpull: false
+        });
       } catch (error) {
         candidate.aiSkippedReason =
           "initial contract analysis failed: " +
@@ -308,6 +311,15 @@ export async function runBscScan(options: {
       if (!contract?.sourceCode) {
         candidate.aiSkippedReason = "verified source not available";
         continue;
+      }
+
+      if (config.goPlusAppKey && config.goPlusAppSecret) {
+        try {
+          contract.rugpullSignals = await getRugpullSignals(contract.address);
+        } catch (error) {
+          contract.rugpullError =
+            error instanceof Error ? error.message : String(error);
+        }
       }
 
       contract.aiAnalysis = await analyzeWithDeepSeek({
