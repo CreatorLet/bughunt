@@ -2,46 +2,149 @@
 
 Bughunt is a BSC-first smart-contract security research assistant.
 
-The first version combines DeFiLlama for protocol discovery, Etherscan V2 for verified source and ABI, GoPlus for security signals, local Solidity heuristics, and DeepSeek V4.1-Flash for deeper code reasoning.
+It combines:
+
+- **DeFiLlama** for protocol discovery and BSC TVL filtering
+- **Etherscan V2** for verified Solidity source and ABI
+- **GoPlus** for token and DeFi security signals
+- Local heuristics for fast pre-screening
+- Function-surface detection for money-moving, privileged, financial, and external-execution functions
+- **DeepSeek V4.1-Flash** for deeper defensive code analysis
+
+## Finished v1 workflow
+
+The main command is:
+
+```bash
+npm run dev -- scan
+```
+
+Defaults:
+
+- BSC only
+- 20 protocols
+- BSC TVL between **$50,000 and $1,000,000**
+- Up to 4 contract screens in parallel
+- DeepSeek on the top 5 screened contracts
+
+Customize it:
+
+```bash
+npm run dev -- scan --min-tvl 50000 --max-tvl 1000000 --limit 20 --ai-limit 5
+```
+
+The scanner:
+
+```text
+DeFiLlama
+   |
+   v
+20 BSC protocols inside the TVL range
+   |
+   v
+Discover usable contract addresses from protocol metadata
+   |
+   v
+Etherscan + GoPlus
+   |
+   v
+Verified source / ABI / security data
+   |
+   v
+Function-surface screening
+   |
+   +--> money-moving
+   +--> privileged
+   +--> financial-state
+   +--> external-execution
+   |
+   v
+Rank candidates
+   |
+   v
+DeepSeek on top candidates only
+   |
+   v
+JSON + Markdown report
+```
+
+The scan deliberately **does not send transactions or attempt exploits against live contracts**.
 
 ## Setup
 
-1. Clone the repository.
-2. Run npm install.
-3. Copy .env.example to .env.
-4. Add your Etherscan, GoPlus, and DeepSeek credentials.
-5. Run npm run typecheck.
+Requirements:
 
-## Commands
+- Node.js 20+
+- Etherscan API key
+- GoPlus App Key + App Secret
+- DeepSeek API key
 
-Discover small BSC protocols:
+Install:
 
+```bash
+npm install
+cp .env.example .env
+```
+
+Set:
+
+```env
+DEEPSEEK_API_KEY=...
+ETHERSCAN_API_KEY=...
+GOPLUS_APP_KEY=...
+GOPLUS_APP_SECRET=...
+```
+
+Then verify:
+
+```bash
+npm run typecheck
+```
+
+## Manual commands
+
+Discover only:
+
+```bash
 npm run dev -- discover --min-tvl 50000 --max-tvl 1000000 --limit 20
+```
 
-Inspect a DeFiLlama protocol:
+Inspect a protocol:
 
-npm run dev -- protocol <slug>
+```bash
+npm run dev -- protocol <defillama-slug>
+```
 
-Analyze a BSC contract using source, ABI, GoPlus, and local heuristics:
+Analyze one BSC contract:
 
-npm run dev -- analyze --address 0xYOUR_CONTRACT
+```bash
+npm run dev -- analyze --address 0x...
+```
 
-Add DeepSeek analysis after the inexpensive screening stages:
+Analyze one contract with DeepSeek:
 
-npm run dev -- analyze --address 0xYOUR_CONTRACT --ai
+```bash
+npm run dev -- analyze --address 0x... --ai
+```
 
-## Pipeline
+## Reports
 
-DeFiLlama → BSC candidate discovery → Etherscan source/ABI → local heuristics → GoPlus security signals → optional DeepSeek analysis.
+Each full scan writes:
 
-The design deliberately keeps the AI step last so the DeepSeek credit is used on contracts that have already passed cheaper filters.
+```text
+reports/
+  scan-<timestamp>.json
+  scan-<timestamp>.md
+```
 
-## Current scope
+The reports contain protocol metadata, screening scores, detected function surfaces, selected GoPlus security fields, and AI results. Raw Solidity source is not copied into the report.
 
-This version is reconnaissance and defensive auditing only. It does not send transactions, interact with wallets, or execute exploit logic against live contracts.
+## Important limitation
 
-The AI output should be treated as a research hypothesis until a finding is independently reproduced and validated in an authorized test environment.
+DeFiLlama does not always provide a BSC-specific contract address for every protocol. Those protocols are still listed, but Bughunt marks them as **not discovered** instead of guessing an address.
 
-## Next stages
+That is intentional: the scanner should prefer a missing target over silently analyzing the wrong contract.
 
-Automatic contract discovery from protocol metadata; proxy implementation resolution; transaction/token-transfer graphs; Slither or Aderyn integration; protocol-specific invariant checks; Foundry fork tests; caching and a small web dashboard.
+## Next version
+
+The next logical upgrade is automatic discovery of more contracts belonging to a protocol (routers, vaults, pools, implementations, governance contracts, and related addresses) before expanding beyond BSC to Ethereum, Solana, and other networks.
