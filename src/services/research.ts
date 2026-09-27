@@ -23,7 +23,8 @@ export async function researchContract(
   const source = metadata?.SourceCode ?? "";
   const heuristic = source ? runHeuristics(source) : { findings: [], score: 0 };
 
-  const [goPlus, rugpullSignals] = config.goPlusAccessToken
+  const hasGoPlusCredentials = Boolean(config.goPlusAppKey && config.goPlusAppSecret);
+  const [goPlus, rugpullSignals] = hasGoPlusCredentials
     ? await Promise.all([
         getTokenSecurity(address).catch(() => null),
         getRugpullSignals(address).catch(() => null)
