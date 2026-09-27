@@ -314,7 +314,25 @@ export async function runBscScan(options: {
         address: contract.address,
         contractName: contract.contractName,
         source: contract.sourceCode,
-        heuristicFindings: contract.heuristics
+        heuristicFindings: contract.heuristics,
+        context: {
+          functionSurfaces: contract.functionSurfaces ?? [],
+          surfaceScore: contract.surfaceScore,
+          goPlus: contract.goPlus
+            ? {
+                is_open_source: contract.goPlus.is_open_source,
+                is_proxy: contract.goPlus.is_proxy,
+                is_mintable: contract.goPlus.is_mintable,
+                is_honeypot: contract.goPlus.is_honeypot,
+                cannot_buy: contract.goPlus.cannot_buy,
+                cannot_sell_all: contract.goPlus.cannot_sell_all,
+                buy_tax: contract.goPlus.buy_tax,
+                sell_tax: contract.goPlus.sell_tax,
+                holder_count: contract.goPlus.holder_count,
+                total_supply: contract.goPlus.total_supply
+              }
+            : null
+        }
       });
     } catch (error) {
       candidate.aiSkippedReason =
