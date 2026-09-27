@@ -8,7 +8,7 @@ interface DeepSeekResponse {
 }
 
 function parseJson(text: string): unknown {
-  const fenced = text.match(/```(?:json)?\\s*([\\s\\S]*?)```/i);
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const candidate = fenced?.[1]?.trim() ?? text.trim();
   try { return JSON.parse(candidate); } catch {}
   const first = candidate.indexOf("{");
