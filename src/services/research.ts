@@ -7,9 +7,11 @@ import type { ContractResearch } from "../types.js";
 
 function validateAddress(address: string): string {
   const normalized = address.trim();
+
   if (!/^0x[a-fA-F0-9]{40}$/.test(normalized)) {
     throw new Error("Expected a valid 40-character EVM address.");
   }
+
   return normalized;
 }
 
@@ -21,15 +23,31 @@ export async function researchContract(
   const metadata = await getSourceCode(address);
   const abi = await getAbi(address);
   const source = metadata?.SourceCode ?? "";
-  const heuristic = source ? runHeuristics(source) : { findings: [], score: 0 };
+  const heuristic = source
+    ? runHeuristics(source)
+    : { findings: [], score: 0 };
 
-  const hasGoPlusCredentials = Boolean(config.goPlusAppKey && config.goPlusAppSecret);
-  const [goPlus, rugpullSignals] = hasGoPlusCredentials
-    ? await Promise.all([
-        getTokenSecurity(address).catch(() => null),
-        getRugpullSignals(address).catch(() => null)
-      ])
-    : [null, null];
+  let goPlus: ContractResearch["goPlus"] = null;
+  let goPlusError: string | undefined;
+
+  let rugpullSignals: ContractResearch["rugpullSignals"] = null;
+  let rugpullError: string | undefined;
+
+  if (config.goPlusAppKey && config.goPlusAppSecret) {
+    try {
+      goPlus = await getTokenSecurity(address);
+    } catch (error) {
+      goPlusError = error instanceof Error ? error.message : String(error);
+    }
+
+    try {
+      rugpullSignals = await getRugpullSignals(address);
+    } catch (error) {
+      rugpullError = error instanceof Error ? error.message : String(error);
+    }
+  } else {
+    goPlusError = "GoPlus credentials are not configured.";
+  }
 
   const report: ContractResearch = {
     chainId: config.chainId,
@@ -41,6 +59,8 @@ export async function researchContract(
     metadata: metadata ?? undefined,
     goPlus,
     rugpullSignals,
+    goPlusError,
+    rugpullError,
     heuristics: heuristic.findings,
     heuristicScore: heuristic.score
   };
@@ -58,7 +78,10 @@ export async function researchContract(
 }
 
 export function summarizeContract(report: ContractResearch): string {
-  const functions = report.sourceCode ? extractFunctionNames(report.sourceCode).slice(0, 25) : [];
+  const functions = report.sourceCode
+    ? extractFunctionNames(report.sourceCode).slice(0, 25)
+    : [];
+
   const lines = [
     "Address: " + report.address,
     "Chain: BSC (56)",
@@ -70,10 +93,19 @@ export function summarizeContract(report: ContractResearch): string {
 
   if (report.heuristics.length) {
     lines.push("Heuristics:");
+
     for (const finding of report.heuristics) {
-      lines.push("  - [" + finding.severity.toUpperCase() + "] " + finding.title + " (" + finding.confidence + ")");
+      lines.push(
+        "  - [" +
+          finding.severity.toUpperCase() +
+          "] " +
+          finding.title +
+          " (" +
+          finding.confidence +
+          ")"
+      );
     }
   }
 
-  return lines.join("\\n");
+  return lines.join("\n");
 }
