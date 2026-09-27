@@ -42,6 +42,7 @@ export async function analyzeWithDeepSeek(input: {
   source: string;
   heuristicFindings: unknown[];
   maxSourceChars?: number;
+  context?: Record<string, unknown>;
 }): Promise<DeepSeekAnalysis> {
   const apiKey = requireDeepSeek();
 
@@ -66,6 +67,7 @@ export async function analyzeWithDeepSeek(input: {
     address: input.address,
     contractName: input.contractName ?? null,
     heuristicFindings: input.heuristicFindings,
+    context: input.context ?? {},
     source
   });
 
