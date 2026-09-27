@@ -6,7 +6,7 @@ export interface DefiLlamaProtocol {
   category?: string;
   chains?: string[];
   tvl?: number;
-  chainTvls?: Record<string, unknown>;
+  chainTvls?: Record<string, number>;
   currentChainTvls?: Record<string, number>;
   address?: string;
   audits?: number | string;
