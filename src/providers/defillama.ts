@@ -28,20 +28,25 @@ export async function listBscProtocols(
 ): Promise<DefiLlamaProtocol[]> {
   const protocols = await getJson<DefiLlamaProtocol[]>(BASE_URL + "/protocols");
 
-  return protocols
-    .map((protocol) => {
-      const bscTvl = getBscTvlFromProtocolListItem(protocol);
-      if (bscTvl === null) return null;
+  const candidates: DefiLlamaProtocol[] = [];
 
-      return {
-        ...protocol,
-        tvl: bscTvl
-      };
-    })
-    .filter((protocol): protocol is DefiLlamaProtocol => {
-      const tvl = protocol.tvl;
-      return typeof tvl === "number" && tvl >= minTvl && tvl <= maxTvl;
-    })
+  for (const protocol of protocols) {
+    if (!(protocol.chains ?? []).some((chain) => chain.toLowerCase() === "bsc")) {
+      continue;
+    }
+
+    const bscTvl = getBscTvlFromProtocolListItem(protocol);
+    if (bscTvl === null || bscTvl < minTvl || bscTvl > maxTvl) {
+      continue;
+    }
+
+    candidates.push({
+      ...protocol,
+      tvl: bscTvl
+    });
+  }
+
+  return candidates
     .sort((a, b) => Number(b.tvl ?? 0) - Number(a.tvl ?? 0))
     .slice(0, limit);
 }
