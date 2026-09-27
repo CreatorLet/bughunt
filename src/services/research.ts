@@ -1,5 +1,6 @@
 import { config } from "../config.js";
-import { runHeuristics, extractFunctionNames } from "../analysis/heuristics.js";
+import { runHeuristics } from "../analysis/heuristics.js";
+import { analyzeFunctionSurfaces } from "../analysis/surfaces.js";
 import { analyzeWithDeepSeek } from "../analysis/deepseek.js";
 import { getAbi, getSourceCode } from "../providers/etherscan.js";
 import { getRugpullSignals, getTokenSecurity } from "../providers/goplus.js";
@@ -20,12 +21,18 @@ export async function researchContract(
   options: { ai?: boolean } = {}
 ): Promise<ContractResearch> {
   const address = validateAddress(addressInput);
-  const metadata = await getSourceCode(address);
-  const abi = await getAbi(address);
+
+  const [metadata, abi] = await Promise.all([
+    getSourceCode(address),
+    getAbi(address)
+  ]);
+
   const source = metadata?.SourceCode ?? "";
   const heuristic = source
     ? runHeuristics(source)
     : { findings: [], score: 0 };
+
+  const surfaces = analyzeFunctionSurfaces(source, abi);
 
   let goPlus: ContractResearch["goPlus"] = null;
   let goPlusError: string | undefined;
@@ -34,16 +41,29 @@ export async function researchContract(
   let rugpullError: string | undefined;
 
   if (config.goPlusAppKey && config.goPlusAppSecret) {
-    try {
-      goPlus = await getTokenSecurity(address);
-    } catch (error) {
-      goPlusError = error instanceof Error ? error.message : String(error);
+    const [securityResult, rugpullResult] = await Promise.all([
+      getTokenSecurity(address)
+        .then((value) => ({ value }))
+        .catch((error: unknown) => ({
+          error: error instanceof Error ? error.message : String(error)
+        })),
+      getRugpullSignals(address)
+        .then((value) => ({ value }))
+        .catch((error: unknown) => ({
+          error: error instanceof Error ? error.message : String(error)
+        }))
+    ]);
+
+    if ("value" in securityResult) {
+      goPlus = securityResult.value;
+    } else {
+      goPlusError = securityResult.error;
     }
 
-    try {
-      rugpullSignals = await getRugpullSignals(address);
-    } catch (error) {
-      rugpullError = error instanceof Error ? error.message : String(error);
+    if ("value" in rugpullResult) {
+      rugpullSignals = rugpullResult.value;
+    } else {
+      rugpullError = rugpullResult.error;
     }
   } else {
     goPlusError = "GoPlus credentials are not configured.";
@@ -62,7 +82,10 @@ export async function researchContract(
     goPlusError,
     rugpullError,
     heuristics: heuristic.findings,
-    heuristicScore: heuristic.score
+    heuristicScore: heuristic.score,
+    functionNames: surfaces.functions,
+    functionSurfaces: surfaces.surfaces,
+    surfaceScore: surfaces.score
   };
 
   if (options.ai && source) {
@@ -78,18 +101,28 @@ export async function researchContract(
 }
 
 export function summarizeContract(report: ContractResearch): string {
-  const functions = report.sourceCode
-    ? extractFunctionNames(report.sourceCode).slice(0, 25)
-    : [];
-
   const lines = [
     "Address: " + report.address,
     "Chain: BSC (56)",
     "Contract: " + (report.contractName ?? "unknown"),
     "Source: " + (report.sourceVerified ? "verified" : "not verified"),
     "Heuristic score: " + report.heuristicScore,
-    "Functions: " + (functions.join(", ") || "not available")
+    "Surface score: " + report.surfaceScore,
+    "Functions: " +
+      (report.functionNames?.slice(0, 25).join(", ") || "not available")
   ];
+
+  if (report.functionSurfaces?.length) {
+    lines.push("Interesting function surfaces:");
+    for (const surface of report.functionSurfaces) {
+      lines.push(
+        "  - [" +
+          surface.kind.toUpperCase() +
+          "] " +
+          surface.name
+      );
+    }
+  }
 
   if (report.heuristics.length) {
     lines.push("Heuristics:");
