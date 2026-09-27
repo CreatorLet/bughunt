@@ -14,7 +14,12 @@ function getBscTvlFromProtocolListItem(protocol: DefiLlamaProtocol): number | nu
   const chainTvls = protocol.chainTvls;
   if (!chainTvls) return null;
 
-  const key = Object.keys(chainTvls).find((name) => name.toLowerCase() === "bsc");
+  // DeFiLlama labels BNB Smart Chain as "Binance" in protocol TVL data.
+  const key = Object.keys(chainTvls).find((name) => {
+    const normalized = name.trim().toLowerCase();
+    return normalized === "binance" || normalized === "bsc" || normalized === "bnb smart chain";
+  });
+
   if (!key) return null;
 
   const value = chainTvls[key];
@@ -31,7 +36,12 @@ export async function listBscProtocols(
   const candidates: DefiLlamaProtocol[] = [];
 
   for (const protocol of protocols) {
-    if (!(protocol.chains ?? []).some((chain) => chain.toLowerCase() === "bsc")) {
+    const hasBscChain = (protocol.chains ?? []).some((chain) => {
+      const normalized = chain.trim().toLowerCase();
+      return normalized === "binance" || normalized === "bsc" || normalized === "bnb smart chain";
+    });
+
+    if (!hasBscChain) {
       continue;
     }
 
