@@ -1,6 +1,6 @@
 import type { AbiItem, FunctionSurface } from "../types.js";
 
-const MONEY_MOVING = [
+const MONEY_MOVING_HIGH = [
   "withdraw",
   "withdrawall",
   "redeem",
@@ -15,6 +15,10 @@ const MONEY_MOVING = [
   "flashloan",
   "borrow",
   "repay",
+  "send"
+];
+
+const TOKEN_MOVEMENT = [
   "transfer",
   "transferfrom",
   "safetransfer",
@@ -28,14 +32,12 @@ const PRIVILEGED = [
   "upgrade",
   "upgradeto",
   "upgradeimplementation",
-  "initialize",
   "setoracle",
   "setprice",
   "setrouter",
   "setminter",
   "grantrole",
   "revokerole",
-  "renounceownership",
   "transferownership",
   "pause",
   "unpause",
@@ -45,8 +47,6 @@ const PRIVILEGED = [
 ];
 
 const FINANCIAL_STATE = [
-  "share",
-  "shares",
   "exchange",
   "rate",
   "price",
@@ -55,20 +55,42 @@ const FINANCIAL_STATE = [
   "debt",
   "fee",
   "interest",
-  "liquidat"
+  "liquidat",
+  "burnrate",
+  "teamrate",
+  "vtokensfeerate",
+  "feewallet"
 ];
 
 function normalized(value: string): string {
   return value.replace(/[^a-z0-9]/gi, "").toLowerCase();
 }
 
-function classifyFunction(name: string): FunctionSurface["kind"] | null {
+function classifyFunction(name: string): {
+  kind: FunctionSurface["kind"];
+  weight: number;
+} | null {
   const n = normalized(name);
 
-  if (MONEY_MOVING.includes(n)) return "money-moving";
-  if (PRIVILEGED.includes(n)) return "privileged";
-  if (FINANCIAL_STATE.some((term) => n.includes(term))) return "financial-state";
-  if (["call", "delegatecall", "staticcall"].includes(n)) return "external-execution";
+  if (PRIVILEGED.includes(n)) {
+    return { kind: "privileged", weight: 5 };
+  }
+
+  if (MONEY_MOVING_HIGH.includes(n)) {
+    return { kind: "money-moving", weight: 5 };
+  }
+
+  if (FINANCIAL_STATE.some((term) => n.includes(term))) {
+    return { kind: "financial-state", weight: 2 };
+  }
+
+  if (TOKEN_MOVEMENT.includes(n)) {
+    return { kind: "token-transfer", weight: 1 };
+  }
+
+  if (["call", "delegatecall", "staticcall"].includes(n)) {
+    return { kind: "external-execution", weight: 3 };
+  }
 
   return null;
 }
@@ -79,8 +101,8 @@ export function extractAbiFunctions(abi: unknown): AbiItem[] {
   return abi.filter((item): item is AbiItem => {
     return Boolean(
       item &&
-      typeof item === "object" &&
-      (item as Record<string, unknown>).type === "function"
+        typeof item === "object" &&
+        (item as Record<string, unknown>).type === "function"
     );
   });
 }
@@ -94,13 +116,19 @@ export function analyzeFunctionSurfaces(
   score: number;
 } {
   const abiFunctions = extractAbiFunctions(abi);
+
+  // Prefer ABI-visible functions. This prevents imported OpenZeppelin/library
+  // helpers and internal functions from dominating the risk score.
   const abiNames = abiFunctions
     .map((item) => item.name)
     .filter((name): name is string => typeof name === "string");
 
-  const sourceNames = [...source.matchAll(/\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/g)]
-    .map((match) => match[1])
-    .filter((name): name is string => Boolean(name));
+  const sourceNames =
+    abiNames.length > 0
+      ? []
+      : [...source.matchAll(/\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/g)]
+          .map((match) => match[1])
+          .filter((name): name is string => Boolean(name));
 
   const names = [...new Set([...abiNames, ...sourceNames])].sort();
 
@@ -108,20 +136,16 @@ export function analyzeFunctionSurfaces(
   let score = 0;
 
   for (const name of names) {
-    const kind = classifyFunction(name);
-    if (!kind) continue;
+    const classification = classifyFunction(name);
+    if (!classification) continue;
 
-    const weight =
-      kind === "money-moving"
-        ? 4
-        : kind === "privileged"
-          ? 4
-          : kind === "financial-state"
-            ? 3
-            : 3;
+    surfaces.push({
+      name,
+      kind: classification.kind,
+      weight: classification.weight
+    });
 
-    surfaces.push({ name, kind, weight });
-    score += weight;
+    score += classification.weight;
   }
 
   return {
