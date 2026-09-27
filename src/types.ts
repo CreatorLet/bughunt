@@ -116,5 +116,8 @@ export interface ContractResearch {
   rugpullError?: string;
   heuristics: HeuristicFinding[];
   heuristicScore: number;
+  functionNames?: string[];
+  functionSurfaces?: FunctionSurface[];
+  surfaceScore: number;
   aiAnalysis?: DeepSeekAnalysis;
 }
