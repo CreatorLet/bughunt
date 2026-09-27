@@ -9,17 +9,14 @@ async function getJson<T>(url: string): Promise<T> {
 }
 
 function getBscChainTvl(protocol: DefiLlamaProtocol): number | null {
-  const map = protocol.chainTvls;
-  if (!map) return null;
+  const current = protocol.currentChainTvls;
+  if (!current) return null;
 
-  const direct = map.BSC;
-  if (typeof direct === "number") return direct;
-
-  const key = Object.keys(map).find((name) => name.toLowerCase() === "bsc");
+  const key = Object.keys(current).find((name) => name.toLowerCase() === "bsc");
   if (!key) return null;
 
-  const value = map[key];
-  return typeof value === "number" ? value : null;
+  const value = current[key];
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
 export async function listBscProtocols(
@@ -33,8 +30,6 @@ export async function listBscProtocols(
     .filter((p) => (p.chains ?? []).some((c) => c.toLowerCase() === "bsc"))
     .sort((a, b) => Number(b.tvl ?? 0) - Number(a.tvl ?? 0));
 
-  // The list endpoint can expose only global TVL. Fetch protocol details for
-  // candidates so the filter uses the TVL actually attributed to BSC.
   const results: DefiLlamaProtocol[] = [];
   const batchSize = 8;
 
@@ -51,16 +46,12 @@ export async function listBscProtocols(
           );
 
           const bscTvl = getBscChainTvl(detail);
-
-          // If chain-specific TVL is unavailable, fall back conservatively to 0
-          // rather than incorrectly treating global TVL as BSC TVL.
           if (bscTvl === null) return null;
 
           return {
             ...candidate,
             ...detail,
-            tvl: bscTvl,
-            chainTvls: detail.chainTvls
+            tvl: bscTvl
           } as DefiLlamaProtocol;
         } catch {
           return null;
