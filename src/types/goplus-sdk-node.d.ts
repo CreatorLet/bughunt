@@ -26,6 +26,5 @@ declare module "@goplus/sdk-node" {
     ): Promise<GoPlusResponse<Record<string, unknown>>>;
   }
 
-  const GoPlus: GoPlusClient;
-  export default GoPlus;
+  export const GoPlus: GoPlusClient;
 }
