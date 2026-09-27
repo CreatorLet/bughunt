@@ -1,21 +1,32 @@
 import { requireDeepSeek } from "../config.js";
+import type { DeepSeekAnalysis, DeepSeekUsage } from "../types.js";
 
 const BASE_URL = "https://api.deepseek.com";
 const MODEL = "deepseek-flash";
 
 interface DeepSeekResponse {
+  id?: string;
   choices?: Array<{ message?: { content?: string } }>;
+  usage?: DeepSeekUsage;
 }
 
 function parseJson(text: string): unknown {
-  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const fenced = text.match(/\`\`\`(?:json)?\s*([\s\S]*?)\`\`\`/i);
   const candidate = fenced?.[1]?.trim() ?? text.trim();
-  try { return JSON.parse(candidate); } catch {}
+
+  try {
+    return JSON.parse(candidate);
+  } catch {}
+
   const first = candidate.indexOf("{");
   const last = candidate.lastIndexOf("}");
+
   if (first >= 0 && last > first) {
-    try { return JSON.parse(candidate.slice(first, last + 1)); } catch {}
+    try {
+      return JSON.parse(candidate.slice(first, last + 1));
+    } catch {}
   }
+
   return { raw: text };
 }
 
@@ -25,7 +36,7 @@ export async function analyzeWithDeepSeek(input: {
   source: string;
   heuristicFindings: unknown[];
   maxSourceChars?: number;
-}): Promise<unknown> {
+}): Promise<DeepSeekAnalysis> {
   const apiKey = requireDeepSeek();
   const source = input.source.slice(0, input.maxSourceChars ?? 120000);
 
@@ -65,13 +76,24 @@ export async function analyzeWithDeepSeek(input: {
     })
   });
 
+  const body = await response.text();
+
   if (!response.ok) {
-    const body = await response.text().catch(() => "");
-    throw new Error("DeepSeek request failed: HTTP " + response.status + " " + body);
+    throw new Error(
+      "DeepSeek request failed: HTTP " + response.status + " " + body
+    );
   }
 
-  const data = (await response.json()) as DeepSeekResponse;
+  const data = JSON.parse(body) as DeepSeekResponse;
   const content = data.choices?.[0]?.message?.content;
-  if (!content) throw new Error("DeepSeek returned no analysis content.");
-  return parseJson(content);
+
+  if (!content) {
+    throw new Error("DeepSeek returned no analysis content.");
+  }
+
+  return {
+    result: parseJson(content),
+    requestId: data.id,
+    usage: data.usage
+  };
 }
