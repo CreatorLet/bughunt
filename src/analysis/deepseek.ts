@@ -6,7 +6,13 @@ const MODEL = "deepseek-flash";
 
 interface DeepSeekResponse {
   id?: string;
-  choices?: Array<{ message?: { content?: string } }>;
+  choices?: Array<{
+    message?: {
+      content?: string | null;
+      reasoning_content?: string | null;
+    };
+    finish_reason?: string | null;
+  }>;
   usage?: DeepSeekUsage;
 }
 
@@ -38,16 +44,21 @@ export async function analyzeWithDeepSeek(input: {
   maxSourceChars?: number;
 }): Promise<DeepSeekAnalysis> {
   const apiKey = requireDeepSeek();
-  const source = input.source.slice(0, input.maxSourceChars ?? 120000);
+
+  // Keep the first AI pass economical. A later stage can analyze individual
+  // functions more deeply after this screening pass.
+  const source = input.source.slice(0, input.maxSourceChars ?? 60000);
 
   const system = [
     "You are a smart-contract security research assistant.",
     "This is authorized defensive code auditing.",
+    "Analyze the supplied Solidity for concrete security weaknesses.",
     "Do not provide instructions for stealing funds from live protocols.",
-    "Identify concrete weaknesses and distinguish confirmed issues from hypotheses.",
+    "Separate confirmed issues from hypotheses.",
     "Trace state changes, external calls, access control, accounting, oracle use, signatures, and upgradeability.",
-    "Return JSON with keys summary, findings, manual_tests.",
-    "Each finding should include title, severity, confidence, functions, evidence, invariant_or_assumption, recommended_fix.",
+    "Return a JSON object with exactly these top-level keys: summary, findings, manual_tests.",
+    "findings must be an array of objects with: title, severity, confidence, functions, evidence, invariant_or_assumption, recommended_fix.",
+    "manual_tests must be an array of strings.",
     "A suspicious pattern alone is not enough for a high-confidence finding."
   ].join(" ");
 
@@ -69,13 +80,14 @@ export async function analyzeWithDeepSeek(input: {
       },
       body: JSON.stringify({
         model: MODEL,
+        reasoning_effort: "low",
         thinking: { type: "enabled" },
+        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: system },
           { role: "user", content: user }
         ],
-        temperature: 0.1,
-        max_tokens: 12000
+        max_tokens: 10000
       })
     });
   } catch (error) {
@@ -93,11 +105,27 @@ export async function analyzeWithDeepSeek(input: {
     );
   }
 
-  const data = JSON.parse(body) as DeepSeekResponse;
-  const content = data.choices?.[0]?.message?.content;
+  let data: DeepSeekResponse;
 
-  if (!content) {
-    throw new Error("DeepSeek returned no analysis content.");
+  try {
+    data = JSON.parse(body) as DeepSeekResponse;
+  } catch {
+    throw new Error("DeepSeek returned invalid JSON.");
+  }
+
+  const choice = data.choices?.[0];
+  const content = choice?.message?.content;
+
+  if (!content || !content.trim()) {
+    const reasoningLength = choice?.message?.reasoning_content?.length ?? 0;
+    throw new Error(
+      "DeepSeek returned no final analysis content. finish_reason=" +
+        (choice?.finish_reason ?? "unknown") +
+        ", reasoning_chars=" +
+        reasoningLength +
+        ", raw_response=" +
+        body.slice(0, 1500)
+    );
   }
 
   return {
