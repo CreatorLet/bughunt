@@ -1,0 +1,21 @@
+{
+  "name": "bughunt",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "BSC-first smart-contract security research assistant.",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "dotenv": "^17.2.2",
+    "tsx": "^4.20.5",
+    "typescript": "^5.9.2"
+  }
+}
