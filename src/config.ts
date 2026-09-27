@@ -19,7 +19,8 @@ export const config = {
   chainName: "BSC",
   deepSeekApiKey: process.env.DEEPSEEK_API_KEY?.trim() || "",
   etherscanApiKey: process.env.ETHERSCAN_API_KEY?.trim() || "",
-  goPlusAccessToken: process.env.GOPLUS_ACCESS_TOKEN?.trim() || "",
+  goPlusAppKey: process.env.GOPLUS_APP_KEY?.trim() || "",
+  goPlusAppSecret: process.env.GOPLUS_APP_SECRET?.trim() || "",
   minTvl: optionalNumber("DEFAULT_MIN_TVL", 50000),
   maxTvl: optionalNumber("DEFAULT_MAX_TVL", 1000000),
   protocolLimit: Math.max(1, Math.floor(optionalNumber("DEFAULT_PROTOCOL_LIMIT", 25)))
@@ -27,4 +28,5 @@ export const config = {
 
 export function requireDeepSeek(): string { return required("DEEPSEEK_API_KEY"); }
 export function requireEtherscan(): string { return required("ETHERSCAN_API_KEY"); }
-export function requireGoPlus(): string { return required("GOPLUS_ACCESS_TOKEN"); }
+export function requireGoPlusAppKey(): string { return required("GOPLUS_APP_KEY"); }
+export function requireGoPlusAppSecret(): string { return required("GOPLUS_APP_SECRET"); }
