@@ -1,0 +1,1289 @@
+{
+  "generatedAt": "2026-09-27T17:04:02.183Z",
+  "chain": "BSC",
+  "chainId": "56",
+  "tvlRange": {
+    "min": 50000,
+    "max": 1000000
+  },
+  "protocolLimit": 20,
+  "aiLimit": 5,
+  "protocolsFound": 20,
+  "contractsAnalyzed": 11,
+  "aiAnalyzed": 4,
+  "candidates": [
+    {
+      "protocolName": "Dinosaur Eggs",
+      "slug": "dinosaur-eggs",
+      "category": "Dexs",
+      "tvl": 857002.0717306772,
+      "address": "0x9a78649501bbaac285ea4187299471b7ad4abd35",
+      "addressSource": "defillama",
+      "audits": "2",
+      "url": "",
+      "screenScore": 71,
+      "aiSelected": true,
+      "aiSkippedReason": "DeepSeek analysis failed: DeepSeek returned no final analysis content. finish_reason=length, reasoning_chars=38592, raw_response={\"id\":\"9d7e7e85-7279-4da2-a407-f4fa56216965\",\"object\":\"chat.completion\",\"created\":1790528516,\"model\":\"deepseek-flash\",\"choices\":[{\"index\":0,\"message\":{\"role\":\"assistant\",\"content\":\"\",\"reasoning_content\":\"We need answer security analysis JSON. Need inspect Solidity. Need identify concrete issues. Need produce summary, findings array, manual_tests array. We need not follow original heuristic only. Need analyze DSGToken. Let's parse contract.\\n\\nDSGToken extends DelegateERC20, Ownable. Has teamRate=990 (9.9%), teamWallet, feeWallet, vTokenFeeRate=2, burnRate=3. mapping whiteList. minters set. Constructor mints 20e18 to msg.sender. onlyOwner setters. addWhiteList etc. _transfer override: if sender and recipient not whitelisted and recipient != 0, apply vTokenFeeRate (2/10000 = 0.02%)? Actually vTokenFeeRate=2 and divide 10000 => 0.02%. burnRate=3 => 0.03%. teamRate=990 => 9.9% for mint. But in _transfer uses vTokenFeeRate and burnRate. Fee to feeWallet, burn from sender. Then super._transfer(sender, recipient, amount). Note order: amount initially full. fee = amount * vTokenFeeRate / 10000; amount = amount - fee; super._transfer(sender, feeWallet, fee); then burn = _amount * burnRate /10000; amount = amount - burn; _burn(sender, burn). Wait _burn(sender, burn) after super._transfer(sender, feeWallet, fee) but before super._transfer to recipient. It burns from sender, requiring sender balance after fee transfer? Let's check: _transfer first fee transfer out of sender. Then burn fr",
+      "contract": {
+        "address": "0x9a78649501bbaac285ea4187299471b7ad4abd35",
+        "contractName": "DSGToken",
+        "sourceVerified": true,
+        "surfaceScore": 60,
+        "heuristicScore": 1,
+        "functionNames": [
+          "DELEGATION_TYPEHASH",
+          "DOMAIN_TYPEHASH",
+          "_add",
+          "_approve",
+          "_at",
+          "_beforeTokenTransfer",
+          "_burn",
+          "_contains",
+          "_delegate",
+          "_length",
+          "_mint",
+          "_moveDelegates",
+          "_msgData",
+          "_msgSender",
+          "_remove",
+          "_setupDecimals",
+          "_transfer",
+          "_writeCheckpoint",
+          "add",
+          "addMinter",
+          "addWhiteList",
+          "allowance",
+          "approve",
+          "at",
+          "balanceOf",
+          "burn",
+          "burnRate",
+          "checkpoints",
+          "contains",
+          "decimals",
+          "decreaseAllowance",
+          "delMinter",
+          "delegate",
+          "delegateBySig",
+          "div",
+          "feeWallet",
+          "getChainId",
+          "getCurrentVotes",
+          "getMinter",
+          "getMinterLength",
+          "getPriorVotes",
+          "increaseAllowance",
+          "isMinter",
+          "isWhiteList",
+          "length",
+          "mint",
+          "mod",
+          "mul",
+          "name",
+          "nonces",
+          "numCheckpoints",
+          "owner",
+          "remove",
+          "removeWhiteList",
+          "renounceOwnership",
+          "safe32",
+          "setBurnRate",
+          "setFeeWallet",
+          "setTeamRate",
+          "setTeamWallet",
+          "setVTokenFeeRate",
+          "sub",
+          "symbol",
+          "teamRate",
+          "teamWallet",
+          "totalBurned",
+          "totalSupply",
+          "transfer",
+          "transferFrom",
+          "transferOwnership",
+          "tryAdd",
+          "tryDiv",
+          "tryMod",
+          "tryMul",
+          "trySub",
+          "vTokenFeeRate"
+        ],
+        "functionSurfaces": [
+          {
+            "name": "_burn",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "_mint",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "_transfer",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "burn",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "burnRate",
+            "kind": "financial-state",
+            "weight": 3
+          },
+          {
+            "name": "feeWallet",
+            "kind": "financial-state",
+            "weight": 3
+          },
+          {
+            "name": "mint",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "renounceOwnership",
+            "kind": "privileged",
+            "weight": 4
+          },
+          {
+            "name": "setBurnRate",
+            "kind": "financial-state",
+            "weight": 3
+          },
+          {
+            "name": "setFeeWallet",
+            "kind": "financial-state",
+            "weight": 3
+          },
+          {
+            "name": "setTeamRate",
+            "kind": "financial-state",
+            "weight": 3
+          },
+          {
+            "name": "setVTokenFeeRate",
+            "kind": "financial-state",
+            "weight": 3
+          },
+          {
+            "name": "teamRate",
+            "kind": "financial-state",
+            "weight": 3
+          },
+          {
+            "name": "transfer",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "transferFrom",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "transferOwnership",
+            "kind": "privileged",
+            "weight": 4
+          },
+          {
+            "name": "vTokenFeeRate",
+            "kind": "financial-state",
+            "weight": 3
+          }
+        ],
+        "goPlus": null,
+        "goPlusError": "GoPlus token security returned code=4029 message=too many requests",
+        "rugpullSignals": {
+          "owner": {
+            "owner_name": "owner()",
+            "owner_address": "0x32b03c76d8b3301981777ea5ecf7f8478b9798b7",
+            "owner_type": "contract"
+          },
+          "privilege_withdraw": 0,
+          "withdraw_missing": 0,
+          "is_open_source": 1,
+          "blacklist": 0,
+          "contract_name": "DSGToken",
+          "selfdestruct": 0,
+          "is_proxy": 0,
+          "approval_abuse": 0
+        },
+        "aiAnalysis": null
+      }
+    },
+    {
+      "protocolName": "Topaz CL",
+      "slug": "topaz-cl",
+      "category": "Dexs",
+      "tvl": 927434.8122955626,
+      "address": "0xdf002282C1474C9592780618Adda7EaA99998Abd",
+      "addressSource": "defillama",
+      "audits": "2",
+      "url": "https://www.topazdex.com",
+      "screenScore": 41,
+      "aiSelected": true,
+      "contract": {
+        "address": "0xdf002282C1474C9592780618Adda7EaA99998Abd",
+        "contractName": "Topaz",
+        "sourceVerified": true,
+        "surfaceScore": 28,
+        "heuristicScore": 3,
+        "functionNames": [
+          "DOMAIN_SEPARATOR",
+          "_afterTokenTransfer",
+          "_approve",
+          "_beforeTokenTransfer",
+          "_buildDomainSeparator",
+          "_burn",
+          "_contextSuffixLength",
+          "_domainSeparatorV4",
+          "_getImplementation",
+          "_hashTypedDataV4",
+          "_mint",
+          "_msgData",
+          "_msgSender",
+          "_setImplementation",
+          "_spendAllowance",
+          "_throwError",
+          "_transfer",
+          "_useNonce",
+          "abs",
+          "allowance",
+          "approve",
+          "average",
+          "balanceOf",
+          "byteLength",
+          "byteLengthWithFallback",
+          "ceilDiv",
+          "current",
+          "decimals",
+          "decreaseAllowance",
+          "decrement",
+          "doThing",
+          "doThingWithPermit",
+          "eip712Domain",
+          "equal",
+          "getAddressSlot",
+          "getBooleanSlot",
+          "getBytes32Slot",
+          "getBytesSlot",
+          "getStringSlot",
+          "getUint256Slot",
+          "increaseAllowance",
+          "increment",
+          "log10",
+          "log2",
+          "log256",
+          "max",
+          "min",
+          "mint",
+          "minter",
+          "mulDiv",
+          "name",
+          "nonces",
+          "permit",
+          "recover",
+          "reset",
+          "setMinter",
+          "sqrt",
+          "symbol",
+          "toDataWithIntendedValidatorHash",
+          "toEthSignedMessageHash",
+          "toHexString",
+          "toShortString",
+          "toShortStringWithFallback",
+          "toString",
+          "toStringWithFallback",
+          "toTypedDataHash",
+          "totalSupply",
+          "transfer",
+          "transferFrom",
+          "tryRecover"
+        ],
+        "functionSurfaces": [
+          {
+            "name": "_burn",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "_mint",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "_transfer",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "mint",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "setMinter",
+            "kind": "privileged",
+            "weight": 4
+          },
+          {
+            "name": "transfer",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "transferFrom",
+            "kind": "money-moving",
+            "weight": 4
+          }
+        ],
+        "goPlus": {
+          "token_name": "Topaz",
+          "token_symbol": "TOPAZ",
+          "is_open_source": "1",
+          "is_proxy": "0",
+          "is_mintable": "1",
+          "is_honeypot": "0",
+          "cannot_buy": "0",
+          "buy_tax": "",
+          "sell_tax": "",
+          "holder_count": "963",
+          "total_supply": "851916257.812491656354115201",
+          "creator_address": "0xd7e8557b8c78e131a9fa893ae12e8c2818234aea"
+        },
+        "rugpullSignals": {
+          "owner": {},
+          "privilege_withdraw": 0,
+          "withdraw_missing": 0,
+          "is_open_source": null,
+          "blacklist": 0,
+          "contract_name": "Topaz",
+          "selfdestruct": 0,
+          "is_proxy": 0,
+          "approval_abuse": 0
+        },
+        "aiAnalysis": {
+          "result": {
+            "summary": "The provided artifact exposes OpenZeppelin ERC20/ERC20Permit/EIP712 dependency code and function surfaces for Topaz, including privileged mint/setMinter functions. The actual Topaz implementation source is not present in the supplied source payload, so most security properties of minting and minter administration cannot be confirmed. The highest-risk hypotheses are an unbounded or weakly controlled mint path and an unverified access-control check on setMinter. The upgrade heuristic appears to be a false positive in the provided code because only non-upgradeable OpenZeppelin contracts were shown and GoPlus reports is_proxy=0.",
+            "findings": [
+              {
+                "title": "Privileged minting may be unbounded or insufficiently constrained",
+                "severity": "high",
+                "confidence": "medium",
+                "functions": [
+                  "mint",
+                  "setMinter"
+                ],
+                "evidence": "The contract surface includes mint and setMinter. GoPlus reports is_mintable=1. The available source does not include the Topaz mint implementation, so it is not possible to confirm a supply cap, timelock, or multisig constraint on minting.",
+                "invariant_or_assumption": "Total token supply should only increase according to a pre-defined protocol policy, and only an authorized minter should be able to mint. If the minter key is compromised or the role is centralized without controls, holders can be diluted and markets manipulated.",
+                "recommended_fix": "If minting is intended, add an immutable supply cap, restrict mint to a timelocked multisig or AccessControl role, emit clear events, and document the minting policy. If minting is not intended, remove or permanently disable the mint function."
+              },
+              {
+                "title": "setMinter access control cannot be verified from supplied source",
+                "severity": "high",
+                "confidence": "medium",
+                "functions": [
+                  "setMinter"
+                ],
+                "evidence": "The function surface marks setMinter as privileged, but the Topaz source containing its modifier, ownership model, and event emissions is missing from the source payload. An unprotected or incorrectly configured setMinter would allow an attacker to become minter and mint arbitrary tokens.",
+                "invariant_or_assumption": "Only a trusted owner/admin should be able to change the minter, and minter changes should be observable and ideally two-step/timelocked.",
+                "recommended_fix": "Verify that setMinter uses a robust access-control check (Ownable or AccessControl), preferably with a two-step ownership transfer and timelock. Add events for minter changes and avoid setting minter to an EOA where possible."
+              },
+              {
+                "title": "Topaz implementation source is missing, preventing confirmation of concrete security properties",
+                "severity": "low",
+                "confidence": "high",
+                "functions": [],
+                "evidence": "The supplied source object contains OpenZeppelin ERC20, ERC20Permit, EIP712, ECDSA, Counters, and related libraries, but not the Topaz contract implementation that defines mint, setMinter, and any overrides.",
+                "invariant_or_assumption": "A meaningful security review requires the full deployed/verified implementation source, including inheritance, modifiers, state variables, and overrides.",
+                "recommended_fix": "Publish verified source for Topaz on the relevant explorer and provide the complete flattened or multi-file source for review. Re-audit after source is available."
+              }
+            ],
+            "manual_tests": [
+              "Fetch and inspect the verified Topaz source at 0xdf002282C1474C9592780618Adda7EaA99998Abd, including inheritance and overrides.",
+              "Check whether mint has a supply cap or fixed-supply guard, and whether the cap is immutable or admin-changeable.",
+              "Simulate calling mint() from a non-minter address and confirm it reverts.",
+              "Simulate calling setMinter() from a non-owner/non-admin address and confirm it reverts.",
+              "Inspect the owner/minter state after deployment and determine whether these are EOAs, multisigs, or timelocks.",
+              "Review totalSupply history and Transfer(0, ...) mint events for unexpected inflation.",
+              "Check permit() nonces, deadline handling, and EIP712 domain separator construction for replay resistance.",
+              "Check ERC1967/proxy admin slots even though GoPlus reports is_proxy=0, to rule out hidden upgradeability.",
+              "Review all token transfer hooks for blacklisting, fee-on-transfer, or trading-restriction logic that may affect transfers."
+            ]
+          },
+          "requestId": "d05b009d-abf1-4210-9dc4-17fcebfd4238",
+          "usage": {
+            "prompt_tokens": 18264,
+            "completion_tokens": 2501,
+            "total_tokens": 20765,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 1592
+            },
+            "prompt_cache_hit_tokens": 0,
+            "prompt_cache_miss_tokens": 18264
+          }
+        }
+      }
+    },
+    {
+      "protocolName": "THENA FUSION",
+      "slug": "thena-fusion",
+      "category": "Dexs",
+      "tvl": 791789.5149180624,
+      "address": "0xf4c8e32eadec4bfe97e0f595add0f4450a863a11",
+      "addressSource": "defillama",
+      "audits": "0",
+      "url": "https://www.thena.fi",
+      "screenScore": 33,
+      "aiSelected": true,
+      "contract": {
+        "address": "0xf4c8e32eadec4bfe97e0f595add0f4450a863a11",
+        "contractName": "Thena",
+        "sourceVerified": true,
+        "surfaceScore": 24,
+        "heuristicScore": 1,
+        "functionNames": [
+          "_mint",
+          "_transfer",
+          "allowance",
+          "approve",
+          "balanceOf",
+          "decimals",
+          "initialMint",
+          "initialMinted",
+          "merkleClaim",
+          "mint",
+          "minter",
+          "name",
+          "redemptionReceiver",
+          "setMinter",
+          "symbol",
+          "totalSupply",
+          "transfer",
+          "transferFrom"
+        ],
+        "functionSurfaces": [
+          {
+            "name": "_mint",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "_transfer",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "mint",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "setMinter",
+            "kind": "privileged",
+            "weight": 4
+          },
+          {
+            "name": "transfer",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "transferFrom",
+            "kind": "money-moving",
+            "weight": 4
+          }
+        ],
+        "goPlus": null,
+        "goPlusError": "GoPlus token security returned code=4029 message=too many requests",
+        "rugpullError": "GoPlus rugpull detection returned code=4029 message=too many requests",
+        "rugpullSignals": null,
+        "aiAnalysis": {
+          "result": {
+            "summary": "The Thena contract is a simple ERC20-like token with a privileged minter. The minter can mint unlimited tokens via mint(), and can transfer minter rights via setMinter() without an event or two-step process. initialMint is a one-time 50M mint but does not cap future minting. No external calls, reentrancy, or signature logic are present. The unchecked additions in _mint and _transfer are safe under the current totalSupply accounting because checked totalSupply and sender-balance updates bound the values. The main risks are centralization of minting power and potential permanent disablement if minter is set to the zero address. Transfers and mints to the zero address are allowed, which can lock tokens.",
+            "findings": [
+              {
+                "title": "Unlimited minting by minter",
+                "severity": "medium",
+                "confidence": "high",
+                "functions": [
+                  "mint",
+                  "_mint",
+                  "setMinter",
+                  "initialMint"
+                ],
+                "evidence": "mint(address account, uint amount) requires msg.sender == minter and calls _mint(account, amount). There is no supply cap, rate limit, or timelock. setMinter(address _minter) allows the current minter to change minter to any address. initialMint(address _recipient) mints 50 * 1e6 * 1e18 once, but does not cap future mint() calls.",
+                "invariant_or_assumption": "Total supply should be bounded or minting should be governed by a timelock/multi-sig. The contract assumes the minter is trusted and never compromised.",
+                "recommended_fix": "Add a hard supply cap, a timelock or multi-sig requirement for minting, or renounce minter privileges after initial distribution if no further minting is intended."
+              },
+              {
+                "title": "setMinter lacks zero-address check and event",
+                "severity": "low",
+                "confidence": "high",
+                "functions": [
+                  "setMinter"
+                ],
+                "evidence": "function setMinter(address _minter) external { require(msg.sender == minter); minter = _minter; } There is no require(_minter != address(0)) and no event emitted. Setting minter to address(0) permanently disables mint() and setMinter() because msg.sender == address(0) is impossible.",
+                "invariant_or_assumption": "The minter should never be the zero address, and minter changes should be observable off-chain.",
+                "recommended_fix": "Add require(_minter != address(0)); emit a MinterChanged(oldMinter, newMinter) event; consider a two-step minter transfer pattern."
+              },
+              {
+                "title": "Minting to zero address is allowed",
+                "severity": "low",
+                "confidence": "high",
+                "functions": [
+                  "_mint",
+                  "mint",
+                  "initialMint"
+                ],
+                "evidence": "_mint(address _to, uint _amount) does not check _to != address(0). mint and initialMint can therefore mint tokens to the zero address, increasing totalSupply while locking the tokens.",
+                "invariant_or_assumption": "Tokens should not be minted to the zero address.",
+                "recommended_fix": "Add require(_to != address(0)) in _mint."
+              },
+              {
+                "title": "Transfers to zero address are allowed",
+                "severity": "low",
+                "confidence": "high",
+                "functions": [
+                  "_transfer",
+                  "transfer",
+                  "transferFrom"
+                ],
+                "evidence": "_transfer(address _from, address _to, uint _value) does not check _to != address(0). transfer and transferFrom can therefore send tokens to the zero address, locking them permanently.",
+                "invariant_or_assumption": "Tokens should not be transferable to the zero address.",
+                "recommended_fix": "Add require(_to != address(0)) in _transfer."
+              }
+            ],
+            "manual_tests": [
+              "Verify that minter can mint arbitrary amounts and totalSupply increases without a cap.",
+              "Verify that setMinter can set minter to address(0), then confirm mint() and setMinter() revert for all callers.",
+              "Verify that setMinter emits no event and can be called by the current minter without a two-step confirmation.",
+              "Verify that after setMinter to a new address, the new minter can call initialMint if initialMinted is still false, minting 50M to any recipient.",
+              "Verify that transfer and transferFrom to address(0) succeed and lock tokens.",
+              "Verify that mint and initialMint to address(0) succeed and lock newly minted tokens.",
+              "Verify that transferFrom with allowance == type(uint).max does not decrease allowance and allows repeated transfers up to balance.",
+              "Verify that _transfer and _mint unchecked recipient balance additions cannot overflow given the checked totalSupply and sender-balance updates."
+            ]
+          },
+          "requestId": "0daaa969-787b-4ab1-b160-fbf4976f3c6f",
+          "usage": {
+            "prompt_tokens": 1755,
+            "completion_tokens": 5029,
+            "total_tokens": 6784,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 3941
+            },
+            "prompt_cache_hit_tokens": 0,
+            "prompt_cache_miss_tokens": 1755
+          }
+        }
+      }
+    },
+    {
+      "protocolName": "Wompie",
+      "slug": "wompie",
+      "category": "Yield",
+      "tvl": 938515.5387179131,
+      "address": "0xD06716E1Ff2E492Cc5034c2E81805562dd3b45fa",
+      "addressSource": "defillama",
+      "audits": "2",
+      "url": "https://www.magpiexyz.io",
+      "screenScore": 28,
+      "aiSelected": true,
+      "contract": {
+        "address": "0xD06716E1Ff2E492Cc5034c2E81805562dd3b45fa",
+        "contractName": "MGP",
+        "sourceVerified": true,
+        "surfaceScore": 20,
+        "heuristicScore": 3,
+        "functionNames": [
+          "DOMAIN_SEPARATOR",
+          "_afterTokenTransfer",
+          "_approve",
+          "_beforeTokenTransfer",
+          "_buildDomainSeparator",
+          "_burn",
+          "_domainSeparatorV4",
+          "_hashTypedDataV4",
+          "_mint",
+          "_msgData",
+          "_msgSender",
+          "_spendAllowance",
+          "_throwError",
+          "_transfer",
+          "_useNonce",
+          "allowance",
+          "approve",
+          "balanceOf",
+          "current",
+          "decimals",
+          "decreaseAllowance",
+          "decrement",
+          "increaseAllowance",
+          "increment",
+          "name",
+          "nonces",
+          "permit",
+          "recover",
+          "reset",
+          "symbol",
+          "toEthSignedMessageHash",
+          "toHexString",
+          "toString",
+          "toTypedDataHash",
+          "totalSupply",
+          "transfer",
+          "transferFrom",
+          "tryRecover"
+        ],
+        "functionSurfaces": [
+          {
+            "name": "_burn",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "_mint",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "_transfer",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "transfer",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "transferFrom",
+            "kind": "money-moving",
+            "weight": 4
+          }
+        ],
+        "goPlus": {
+          "token_name": "Magpie Token",
+          "token_symbol": "MGP",
+          "is_open_source": "1",
+          "is_proxy": "0",
+          "is_mintable": "0",
+          "is_honeypot": "0",
+          "cannot_buy": "0",
+          "cannot_sell_all": "0",
+          "buy_tax": "0",
+          "sell_tax": "0",
+          "holder_count": "13933",
+          "total_supply": "1000000000",
+          "creator_address": "0x0cdb34e6a4d635142bb92fe403d38f636bbb77b8"
+        },
+        "rugpullSignals": {
+          "owner": {},
+          "privilege_withdraw": 0,
+          "withdraw_missing": 0,
+          "is_open_source": 1,
+          "blacklist": 0,
+          "contract_name": "MGP",
+          "selfdestruct": 0,
+          "is_proxy": 0,
+          "approval_abuse": 0
+        },
+        "aiAnalysis": {
+          "result": {
+            "summary": "MGP is a standard OpenZeppelin ERC20 + ERC20Permit token deployed at 0xD06716E1Ff2E492Cc5034c2E81805562dd3b45fa. The constructor mints a fixed total supply to a recipient. There is no owner, no public mint, no burn, no pause, no tax, no blacklist, and no upgradeability. The supplied heuristic flags for 'upgrade' and 'mint' are false positives: 'upgrade' appears only in an OpenZeppelin comment, and _mint is called only once in the constructor. No concrete security weaknesses were confirmed.",
+            "findings": [
+              {
+                "title": "Heuristic 'upgrade' flag is a false positive",
+                "severity": "info",
+                "confidence": "high",
+                "functions": [],
+                "evidence": "The contract inherits ERC20 and ERC20Permit only. It has no proxy, no initializer, no delegatecall, no admin, and no upgrade function. The matched string 'upgrade' occurs in a comment in OpenZeppelin's draft-ERC20Permit.sol about the upgradeable transpiler, not in executable MGP logic.",
+                "invariant_or_assumption": "The deployed bytecode is immutable and matches the verified source. No upgrade mechanism exists.",
+                "recommended_fix": "No fix required. For completeness, verify on-chain bytecode contains no delegatecall or proxy pattern."
+              },
+              {
+                "title": "Heuristic 'mint' flag is a false positive",
+                "severity": "info",
+                "confidence": "high",
+                "functions": [
+                  "constructor"
+                ],
+                "evidence": "_mint is internal and called exactly once in the constructor: _mint(_receipient, _totalSupply). There is no external or privileged mint function. totalSupply is fixed at deployment. The GoPlus report also shows is_mintable = 0.",
+                "invariant_or_assumption": "Total supply after deployment equals the constructor _totalSupply argument and never increases.",
+                "recommended_fix": "No fix required. Confirm the recipient and totalSupply values match intended tokenomics."
+              }
+            ],
+            "manual_tests": [
+              "Verify on-chain that totalSupply() equals the constructor _totalSupply and that no mint function exists in the ABI.",
+              "Inspect the deployed bytecode for delegatecall, proxiable UUID slots, or initializer patterns to confirm no upgradeability.",
+              "Confirm there is no owner, admin, or role-based access control in the ABI.",
+              "Exercise permit() with valid and invalid signatures, expired deadlines, and reused nonces to confirm EIP-2612 behavior.",
+              "Check that transfer, transferFrom, approve, increaseAllowance, and decreaseAllowance follow standard ERC20 semantics and emit expected events.",
+              "Compare the deployed bytecode against the verified source compilation to rule out hidden logic."
+            ]
+          },
+          "requestId": "f7b9e7a8-5406-4d27-9724-94d5b04d8f95",
+          "usage": {
+            "prompt_tokens": 13411,
+            "completion_tokens": 1496,
+            "total_tokens": 14907,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 916
+            },
+            "prompt_cache_hit_tokens": 0,
+            "prompt_cache_miss_tokens": 13411
+          }
+        }
+      }
+    },
+    {
+      "protocolName": "Ellipsis Finance",
+      "slug": "ellipsis-finance",
+      "category": "Dexs",
+      "tvl": 806345.3600210411,
+      "address": "0xA7f552078dcC247C2684336020c03648500C6d9F",
+      "addressSource": "defillama",
+      "audits": "3",
+      "url": "",
+      "screenScore": 27,
+      "aiSelected": true,
+      "contract": {
+        "address": "0xA7f552078dcC247C2684336020c03648500C6d9F",
+        "contractName": "Vyper_contract",
+        "sourceVerified": true,
+        "surfaceScore": 16,
+        "heuristicScore": 1,
+        "functionNames": [
+          "allowance",
+          "approve",
+          "balanceOf",
+          "burnFrom",
+          "decimals",
+          "decreaseAllowance",
+          "increaseAllowance",
+          "mint",
+          "minter",
+          "name",
+          "set_minter",
+          "symbol",
+          "totalSupply",
+          "transfer",
+          "transferFrom"
+        ],
+        "functionSurfaces": [
+          {
+            "name": "mint",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "set_minter",
+            "kind": "privileged",
+            "weight": 4
+          },
+          {
+            "name": "transfer",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "transferFrom",
+            "kind": "money-moving",
+            "weight": 4
+          }
+        ],
+        "goPlus": {
+          "token_name": "Ellipsis",
+          "token_symbol": "EPS",
+          "is_open_source": "1",
+          "is_proxy": "0",
+          "is_mintable": "1",
+          "is_honeypot": "0",
+          "cannot_buy": "0",
+          "buy_tax": "",
+          "sell_tax": "",
+          "holder_count": "21594",
+          "total_supply": "723701571.799788763488815703",
+          "creator_address": "0xabc00210a691ce0f3d7d0602d7d84aea4d91cdfd"
+        },
+        "rugpullSignals": {
+          "owner": {},
+          "privilege_withdraw": 0,
+          "withdraw_missing": 0,
+          "is_open_source": 1,
+          "blacklist": 0,
+          "contract_name": "Vyper_contract",
+          "selfdestruct": 0,
+          "is_proxy": 0,
+          "approval_abuse": 0
+        },
+        "aiAnalysis": {
+          "result": {
+            "summary": "Vyper 0.2.11 Curve LP token implementation. The core ERC20 methods are simple and rely on Vyper 0.2.11 checked arithmetic, so underflows revert atomically; no direct arithmetic bypass was confirmed. The main risks are privileged minter functionality: mint() and burnFrom() have no supply cap and are only gated by self.minter; set_minter() can transfer the minter role without a two-step handoff, zero-address check, or event. Missing zero-address checks in transfer/mint are low-impact operational issues. Findings are separated by confidence where compiler semantics or deployment state affect impact.",
+            "findings": [
+              {
+                "title": "Minter can mint and burn arbitrarily without supply cap",
+                "severity": "medium",
+                "confidence": "high",
+                "functions": [
+                  "mint",
+                  "burnFrom",
+                  "set_minter"
+                ],
+                "evidence": "mint() and burnFrom() only check `assert msg.sender == self.minter` and then directly update `totalSupply` and `balanceOf` with no cap, timelock, or rate limit. set_minter() allows the current minter to replace itself with any address, including an EOA.",
+                "invariant_or_assumption": "The LP token supply should change only as a result of pool deposits/withdrawals, and the minter should be the Curve pool or an immutable trusted contract. If the minter is an EOA or a compromised contract, this invariant is violated and the LP token can be inflated arbitrarily.",
+                "recommended_fix": "Verify the on-chain minter is the intended Curve pool/controller. If possible, transfer minter to the pool in the same deployment transaction and lock it. Add a two-step minter transfer, emit an event, and consider removing or timelocking set_minter for production LP tokens."
+              },
+              {
+                "title": "set_minter lacks zero-address check, event, and two-step transfer",
+                "severity": "low",
+                "confidence": "high",
+                "functions": [
+                  "set_minter"
+                ],
+                "evidence": "`set_minter(_minter: address)` contains only `assert msg.sender == self.minter` and `self.minter = _minter`. There is no `assert _minter != ZERO_ADDRESS`, no `log` event, and no pending-minter confirmation step.",
+                "invariant_or_assumption": "Minter changes should be observable and should not accidentally render mint/burn permanently impossible. If minter is set to the zero address, no address can satisfy `msg.sender == self.minter`, so mint and burnFrom become permanently uncallable.",
+                "recommended_fix": "Add a zero-address check, emit a `MinterChanged` event, and use a two-step transfer pattern: `set_pending_minter` by current minter, then `accept_minter` by the new minter."
+              },
+              {
+                "title": "transferFrom relies on revert-on-underflow for allowance check ordering",
+                "severity": "low",
+                "confidence": "low",
+                "functions": [
+                  "transferFrom"
+                ],
+                "evidence": "`self.balanceOf[_from] -= _value` and `self.balanceOf[_to] += _value` are executed before `_allowance = self.allowance[_from][msg.sender]` and the allowance subtraction. If arithmetic were unchecked, a caller with insufficient allowance could transfer tokens and then underflow the allowance to revert or bypass depending on compiler semantics.",
+                "invariant_or_assumption": "Vyper 0.2.11 underflow reverts the entire transaction, so this ordering should be atomic and safe. This finding is a hypothesis about compiler dependence, not a confirmed exploit in the supplied version.",
+                "recommended_fix": "Reorder the allowance check before balance mutations or add an explicit `assert _allowance >= _value or _allowance == MAX_UINT256` for clarity and future compiler safety."
+              },
+              {
+                "title": "Missing zero-address checks in transfer and mint",
+                "severity": "low",
+                "confidence": "high",
+                "functions": [
+                  "transfer",
+                  "mint"
+                ],
+                "evidence": "transfer() allows `_to == ZERO_ADDRESS`, increasing `balanceOf[ZERO_ADDRESS]` without reducing `totalSupply`. mint() also allows `_to == ZERO_ADDRESS`, creating balance for the zero address and increasing totalSupply.",
+                "invariant_or_assumption": "Tokens sent to the zero address should not be recoverable and should not count as circulating supply. Minting to the zero address creates unowned supply rather than a useful burn.",
+                "recommended_fix": "Add zero-address checks to transfer, transferFrom, approve, mint, and burnFrom if these functions are intended for normal user/pool flow. For burn semantics, emit a proper burn event and update totalSupply."
+              }
+            ],
+            "manual_tests": [
+              "Read minter() and confirm it equals the intended Curve pool/controller; verify whether any non-minter can call mint or burnFrom.",
+              "Call set_minter(ZERO_ADDRESS) from the current minter and verify whether it succeeds and whether any event is emitted.",
+              "Call set_minter(attacker) from a non-minter and verify the transaction reverts.",
+              "Call transferFrom with allowance < value and verify the transaction reverts with balances and allowance unchanged.",
+              "Call transferFrom with MAX_UINT256 allowance and verify allowance is not decremented and the transfer succeeds.",
+              "Call transfer(ZERO_ADDRESS, 1) and verify whether tokens are stuck and totalSupply remains unchanged.",
+              "Call mint(ZERO_ADDRESS, 1) as minter and verify balanceOf[ZERO_ADDRESS] and totalSupply both increase.",
+              "After mint and burnFrom operations, compare totalSupply against the sum of all balances and expected pool reserve changes."
+            ]
+          },
+          "requestId": "a4ef01aa-c7a3-4a43-b1b5-95dce1d57377",
+          "usage": {
+            "prompt_tokens": 2230,
+            "completion_tokens": 4650,
+            "total_tokens": 6880,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 3481
+            },
+            "prompt_cache_hit_tokens": 0,
+            "prompt_cache_miss_tokens": 2230
+          }
+        }
+      }
+    },
+    {
+      "protocolName": "Venus Isolated Pools",
+      "slug": "venus-isolated-pools",
+      "category": "Lending",
+      "tvl": 895042.0246687996,
+      "address": "0xcf6bb5389c92bdda8a3747ddb454cb7a64626c63",
+      "addressSource": "defillama",
+      "audits": "2",
+      "url": "https://app.venus.io/#/isolated-pools/",
+      "screenScore": 18,
+      "aiSelected": false,
+      "contract": {
+        "address": "0xcf6bb5389c92bdda8a3747ddb454cb7a64626c63",
+        "sourceVerified": false,
+        "surfaceScore": 12,
+        "heuristicScore": 0,
+        "functionNames": [
+          "DELEGATION_TYPEHASH",
+          "DOMAIN_TYPEHASH",
+          "allowance",
+          "approve",
+          "balanceOf",
+          "checkpoints",
+          "decimals",
+          "delegate",
+          "delegateBySig",
+          "delegates",
+          "freeze",
+          "getCurrentVotes",
+          "getPriorVotes",
+          "name",
+          "nonces",
+          "numCheckpoints",
+          "owner",
+          "symbol",
+          "totalSupply",
+          "transfer",
+          "transferFrom",
+          "transferOwnership",
+          "unfreeze"
+        ],
+        "functionSurfaces": [
+          {
+            "name": "transfer",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "transferFrom",
+            "kind": "money-moving",
+            "weight": 4
+          },
+          {
+            "name": "transferOwnership",
+            "kind": "privileged",
+            "weight": 4
+          }
+        ],
+        "goPlus": {
+          "token_name": "Venus",
+          "token_symbol": "XVS",
+          "is_open_source": "1",
+          "is_proxy": "0",
+          "is_mintable": "0",
+          "is_honeypot": "0",
+          "cannot_buy": "0",
+          "cannot_sell_all": "0",
+          "buy_tax": "0",
+          "sell_tax": "0",
+          "holder_count": "78398",
+          "total_supply": "30000000",
+          "owner_address": "0x3a3284dc0faffb0b5f0d074c4c704d14326c98cf",
+          "creator_address": "0x1ca3ac3686071be692be7f1fbecd668641476d7e"
+        },
+        "rugpullSignals": {
+          "owner": {
+            "owner_name": "owner",
+            "owner_address": "0x3a3284dc0faffb0b5f0d074c4c704d14326c98cf",
+            "owner_type": "contract"
+          },
+          "privilege_withdraw": 0,
+          "withdraw_missing": 0,
+          "is_open_source": 1,
+          "blacklist": 0,
+          "contract_name": "XVS",
+          "selfdestruct": 0,
+          "is_proxy": 0,
+          "approval_abuse": 0
+        },
+        "aiAnalysis": null
+      }
+    },
+    {
+      "protocolName": "Nerve",
+      "slug": "nerve",
+      "category": "Dexs",
+      "tvl": 905108.9688661066,
+      "address": "0x42F6f551ae042cBe50C739158b4f0CAC0Edb9096",
+      "addressSource": "defillama",
+      "audits": "0",
+      "url": "",
+      "screenScore": 2,
+      "aiSelected": false,
+      "contract": {
+        "address": "0x42F6f551ae042cBe50C739158b4f0CAC0Edb9096",
+        "sourceVerified": false,
+        "surfaceScore": 0,
+        "heuristicScore": 0,
+        "functionNames": [],
+        "functionSurfaces": [],
+        "goPlus": {
+          "token_name": "Nerve",
+          "token_symbol": "NRV",
+          "is_open_source": "1",
+          "is_proxy": "0",
+          "is_mintable": "1",
+          "is_honeypot": "0",
+          "cannot_buy": "0",
+          "cannot_sell_all": "0",
+          "buy_tax": "0",
+          "sell_tax": "0",
+          "holder_count": "14132",
+          "total_supply": "237106051.990217364841196007",
+          "owner_address": "0xd94ac9fb78dd9b3feb0ec39f38d86d2ee5ba6b06",
+          "creator_address": "0x3168082c31dc4b03ac752fb43d1c3bf8ae6ee9ae"
+        },
+        "rugpullSignals": {
+          "owner": {
+            "owner_name": "_owner",
+            "owner_address": "0xd94ac9fb78dd9b3feb0ec39f38d86d2ee5ba6b06",
+            "owner_type": "contract"
+          },
+          "privilege_withdraw": 0,
+          "withdraw_missing": 0,
+          "is_open_source": 1,
+          "blacklist": 0,
+          "contract_name": "NerveToken",
+          "selfdestruct": 0,
+          "is_proxy": 0,
+          "approval_abuse": 0
+        },
+        "aiAnalysis": null
+      }
+    },
+    {
+      "protocolName": "LlamaPay",
+      "slug": "llamapay",
+      "category": "Payments",
+      "tvl": 960049.6815562873,
+      "audits": "2",
+      "url": "https://llamapay.io",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    },
+    {
+      "protocolName": "DOOAR V2",
+      "slug": "dooar-v2",
+      "category": "Dexs",
+      "tvl": 945827.6845316894,
+      "audits": "0",
+      "url": "https://beta.dooar.com/swap",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    },
+    {
+      "protocolName": "vfat.io",
+      "slug": "vfat.io",
+      "category": "Yield Aggregator",
+      "tvl": 937562.7618270591,
+      "audits": "2",
+      "url": "https://vfat.io/yield",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    },
+    {
+      "protocolName": "Solo Top",
+      "slug": "solo-top",
+      "category": "Yield",
+      "tvl": 934633.2451090846,
+      "audits": "2",
+      "url": "",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    },
+    {
+      "protocolName": "Orbit Bridge",
+      "slug": "orbit-bridge",
+      "category": "Bridge",
+      "tvl": 890609.6222862471,
+      "audits": "2",
+      "url": "https://bridge.orbitchain.io",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    },
+    {
+      "protocolName": "Railgun",
+      "slug": "railgun",
+      "category": "Privacy",
+      "tvl": 831840.4237354783,
+      "address": "0xe76c6c83af64e4c60245d8c7de953df673a7a33d",
+      "addressSource": "defillama",
+      "audits": "2",
+      "url": "https://railgun.org",
+      "screenScore": 0,
+      "aiSelected": false,
+      "contract": {
+        "address": "0xe76c6c83af64e4c60245d8c7de953df673a7a33d",
+        "sourceVerified": false,
+        "surfaceScore": 0,
+        "heuristicScore": 0,
+        "functionNames": [],
+        "functionSurfaces": [],
+        "goPlus": null,
+        "goPlusError": "GoPlus token security returned code=-1 message=Request Timeout!",
+        "rugpullError": "GoPlus rugpull detection returned code=4029 message=too many requests",
+        "rugpullSignals": null,
+        "aiAnalysis": null
+      }
+    },
+    {
+      "protocolName": "Wombat Exchange",
+      "slug": "wombat-exchange",
+      "category": "Dexs",
+      "tvl": 830003.5030222334,
+      "address": "0xad6742a35fb341a9cc6ad674738dd8da98b94fb1",
+      "addressSource": "defillama",
+      "audits": "2",
+      "url": "https://www.wombat.exchange/",
+      "screenScore": 0,
+      "aiSelected": false,
+      "contract": {
+        "address": "0xad6742a35fb341a9cc6ad674738dd8da98b94fb1",
+        "sourceVerified": false,
+        "surfaceScore": 0,
+        "heuristicScore": 0,
+        "functionNames": [],
+        "functionSurfaces": [],
+        "goPlus": {
+          "token_name": "Wombat Token",
+          "token_symbol": "WOM",
+          "is_open_source": "1",
+          "is_proxy": "0",
+          "is_mintable": "0",
+          "is_honeypot": "0",
+          "cannot_buy": "0",
+          "cannot_sell_all": "0",
+          "buy_tax": "0",
+          "sell_tax": "0",
+          "holder_count": "27873",
+          "total_supply": "1000000000",
+          "creator_address": "0x8c6644415b3f3cd7fc0a453c5be3d3306fe0b2f9"
+        },
+        "rugpullSignals": {
+          "owner": {},
+          "privilege_withdraw": 0,
+          "withdraw_missing": 0,
+          "is_open_source": 1,
+          "blacklist": 0,
+          "contract_name": "WombatERC20",
+          "selfdestruct": 0,
+          "is_proxy": 0,
+          "approval_abuse": 0
+        },
+        "aiAnalysis": null
+      }
+    },
+    {
+      "protocolName": "Symbiosis",
+      "slug": "symbiosis",
+      "category": "Cross Chain Bridge",
+      "tvl": 801639.4128777916,
+      "address": "0xd38bb40815d2b0c2d2c866e0c72c5728ffc76dd9",
+      "addressSource": "defillama",
+      "audits": "2",
+      "url": "https://symbiosis.finance",
+      "screenScore": 0,
+      "aiSelected": false,
+      "contract": {
+        "address": "0xd38bb40815d2b0c2d2c866e0c72c5728ffc76dd9",
+        "sourceVerified": false,
+        "surfaceScore": 0,
+        "heuristicScore": 0,
+        "functionNames": [],
+        "functionSurfaces": [],
+        "goPlus": null,
+        "goPlusError": "GoPlus token security returned code=4029 message=too many requests",
+        "rugpullError": "GoPlus rugpull detection returned code=4029 message=too many requests",
+        "rugpullSignals": null,
+        "aiAnalysis": null
+      }
+    },
+    {
+      "protocolName": "AZverse Perps",
+      "slug": "azverse-perps",
+      "category": "Derivatives",
+      "tvl": 800864.559721788,
+      "audits": "0",
+      "url": "",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    },
+    {
+      "protocolName": "Stargate V1",
+      "slug": "stargate-v1",
+      "category": "Cross Chain Bridge",
+      "tvl": 759912.1926555879,
+      "address": "0xaf5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6",
+      "addressSource": "defillama",
+      "audits": "2",
+      "url": "https://stargate.finance/",
+      "screenScore": 0,
+      "aiSelected": false,
+      "contract": {
+        "address": "0xaf5191b0de278c7286d6c7cc6ab6bb8a73ba2cd6",
+        "sourceVerified": false,
+        "surfaceScore": 0,
+        "heuristicScore": 0,
+        "functionNames": [],
+        "functionSurfaces": [],
+        "goPlus": null,
+        "goPlusError": "GoPlus token security returned code=4029 message=too many requests",
+        "rugpullError": "GoPlus rugpull detection returned code=4029 message=too many requests",
+        "rugpullSignals": null,
+        "aiAnalysis": null
+      }
+    },
+    {
+      "protocolName": "Wan Bridge",
+      "slug": "wan-bridge",
+      "category": "Bridge",
+      "tvl": 753495.1186434167,
+      "audits": "2",
+      "url": "https://bridge.wanchain.org",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    },
+    {
+      "protocolName": "Pay Protocol",
+      "slug": "pay-protocol",
+      "category": "Payments",
+      "tvl": 736129.6228427365,
+      "audits": "0",
+      "url": "https://payprotocol.network",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    },
+    {
+      "protocolName": "SODAX",
+      "slug": "sodax",
+      "category": "Bridge",
+      "tvl": 716594.6065540791,
+      "audits": "2",
+      "url": "https://www.sodax.com/",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    }
+  ]
+}
