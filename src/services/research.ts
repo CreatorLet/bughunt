@@ -93,7 +93,27 @@ export async function researchContract(
       address,
       contractName: metadata?.ContractName,
       source,
-      heuristicFindings: heuristic.findings
+      heuristicFindings: heuristic.findings,
+      context: {
+        functionSurfaces: surfaces.surfaces,
+        surfaceScore: surfaces.score,
+        goPlus: goPlus
+          ? {
+              is_open_source: goPlus.is_open_source,
+              is_proxy: goPlus.is_proxy,
+              is_mintable: goPlus.is_mintable,
+              is_honeypot: goPlus.is_honeypot,
+              cannot_buy: goPlus.cannot_buy,
+              cannot_sell_all: goPlus.cannot_sell_all,
+              buy_tax: goPlus.buy_tax,
+              sell_tax: goPlus.sell_tax,
+              holder_count: goPlus.holder_count,
+              total_supply: goPlus.total_supply,
+              owner_address: goPlus.owner_address,
+              creator_address: goPlus.creator_address
+            }
+          : null
+      }
     });
   }
 
