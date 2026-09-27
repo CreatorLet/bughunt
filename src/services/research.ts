@@ -18,14 +18,26 @@ function validateAddress(address: string): string {
 
 export async function researchContract(
   addressInput: string,
-  options: { ai?: boolean } = {}
+  options: { ai?: boolean; includeRugpull?: boolean } = {}
 ): Promise<ContractResearch> {
   const address = validateAddress(addressInput);
 
-  const [metadata, abi] = await Promise.all([
-    getSourceCode(address),
-    getAbi(address)
-  ]);
+  const metadata = await getSourceCode(address);
+
+  let abi: unknown = null;
+  if (metadata?.ABI) {
+    try {
+      abi = JSON.parse(metadata.ABI);
+    } catch {
+      abi = null;
+    }
+  }
+
+  // The source endpoint normally includes ABI. Only make a second explorer
+  // request when it is genuinely unavailable.
+  if (!abi) {
+    abi = await getAbi(address);
+  }
 
   const source = metadata?.SourceCode ?? "";
   const heuristic = source
@@ -41,18 +53,20 @@ export async function researchContract(
   let rugpullError: string | undefined;
 
   if (config.goPlusAppKey && config.goPlusAppSecret) {
-    const [securityResult, rugpullResult] = await Promise.all([
-      getTokenSecurity(address)
-        .then((value) => ({ value }))
-        .catch((error: unknown) => ({
-          error: error instanceof Error ? error.message : String(error)
-        })),
-      getRugpullSignals(address)
-        .then((value) => ({ value }))
-        .catch((error: unknown) => ({
-          error: error instanceof Error ? error.message : String(error)
-        }))
-    ]);
+    const includeRugpull = options.includeRugpull ?? true;
+    const securityResult = await getTokenSecurity(address)
+      .then((value) => ({ value }))
+      .catch((error: unknown) => ({
+        error: error instanceof Error ? error.message : String(error)
+      }));
+
+    const rugpullResult = includeRugpull
+      ? await getRugpullSignals(address)
+          .then((value) => ({ value }))
+          .catch((error: unknown) => ({
+            error: error instanceof Error ? error.message : String(error)
+          }))
+      : ({ value: null } as const);
 
     if ("value" in securityResult) {
       goPlus = securityResult.value;
