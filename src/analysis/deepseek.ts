@@ -58,23 +58,32 @@ export async function analyzeWithDeepSeek(input: {
     source
   });
 
-  const response = await fetch(BASE_URL + "/chat/completions", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      authorization: "Bearer " + apiKey
-    },
-    body: JSON.stringify({
-      model: MODEL,
-      thinking: { type: "enabled" },
-      messages: [
-        { role: "system", content: system },
-        { role: "user", content: user }
-      ],
-      temperature: 0.1,
-      max_tokens: 12000
-    })
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(BASE_URL + "/chat/completions", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        authorization: "Bearer " + apiKey
+      },
+      body: JSON.stringify({
+        model: MODEL,
+        thinking: { type: "enabled" },
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user }
+        ],
+        temperature: 0.1,
+        max_tokens: 12000
+      })
+    });
+  } catch (error) {
+    throw new Error(
+      "DeepSeek network request failed: " +
+        (error instanceof Error ? error.message : String(error))
+    );
+  }
 
   const body = await response.text();
 
