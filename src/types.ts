@@ -55,6 +55,19 @@ export interface HeuristicFinding {
   confidence: "high" | "medium" | "low";
 }
 
+export interface DeepSeekUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  total_tokens?: number;
+  [key: string]: unknown;
+}
+
+export interface DeepSeekAnalysis {
+  result: unknown;
+  requestId?: string;
+  usage?: DeepSeekUsage;
+}
+
 export interface ContractResearch {
   chainId: string;
   address: string;
@@ -65,7 +78,9 @@ export interface ContractResearch {
   metadata?: EtherscanSourceRecord;
   goPlus?: GoPlusTokenSecurity | null;
   rugpullSignals?: Record<string, unknown> | null;
+  goPlusError?: string;
+  rugpullError?: string;
   heuristics: HeuristicFinding[];
   heuristicScore: number;
-  aiAnalysis?: unknown;
+  aiAnalysis?: DeepSeekAnalysis;
 }
