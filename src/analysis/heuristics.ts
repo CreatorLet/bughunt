@@ -15,7 +15,7 @@ const RULES: Rule[] = [
     id: "external-call",
     severity: "medium",
     title: "Low-level external call present",
-    pattern: /\\.(call|delegatecall|staticcall)\\s*\\(/,
+    pattern: /\.(call|delegatecall|staticcall)\s*\(/,
     explanation: "Review target control, return-value handling, reentrancy, and state ordering.",
     confidence: "high",
     weight: 2
@@ -24,7 +24,7 @@ const RULES: Rule[] = [
     id: "delegatecall",
     severity: "medium",
     title: "delegatecall present",
-    pattern: /\\.delegatecall\\s*\\(/,
+    pattern: /\.delegatecall\s*\(/,
     explanation: "Review target control, storage compatibility, and upgrade authorization.",
     confidence: "high",
     weight: 3
@@ -33,7 +33,7 @@ const RULES: Rule[] = [
     id: "tx-origin",
     severity: "high",
     title: "tx.origin used",
-    pattern: /\\btx\\s*\\.\\s*origin\\b/,
+    pattern: /\btx\s*\.\s*origin\b/,
     explanation: "tx.origin-based authorization can be unsafe in multi-contract call chains.",
     confidence: "high",
     weight: 4
@@ -42,7 +42,7 @@ const RULES: Rule[] = [
     id: "selfdestruct",
     severity: "medium",
     title: "SELFDESTRUCT reference present",
-    pattern: /\\bselfdestruct\\s*\\(/i,
+    pattern: /\bselfdestruct\s*\(/i,
     explanation: "Review reachability and assumptions around contract code and balance.",
     confidence: "high",
     weight: 2
@@ -51,7 +51,7 @@ const RULES: Rule[] = [
     id: "upgrade",
     severity: "medium",
     title: "Upgrade-related functionality present",
-    pattern: /\\b(upgradeTo|upgrade|_authorizeUpgrade|UUPS|TransparentUpgradeableProxy)\\b/i,
+    pattern: /\b(upgradeTo|upgrade|_authorizeUpgrade|UUPS|TransparentUpgradeableProxy)\b/i,
     explanation: "Review who can upgrade and how initialization and storage compatibility are protected.",
     confidence: "medium",
     weight: 2
@@ -60,7 +60,7 @@ const RULES: Rule[] = [
     id: "oracle",
     severity: "medium",
     title: "Oracle or price dependency detected",
-    pattern: /\\b(oracle|priceFeed|latestRoundData|getPrice|consult|twap)\\b/i,
+    pattern: /\b(oracle|priceFeed|latestRoundData|getPrice|consult|twap)\b/i,
     explanation: "Review manipulation resistance, freshness, decimals, and fallback behavior.",
     confidence: "medium",
     weight: 2
@@ -69,16 +69,16 @@ const RULES: Rule[] = [
     id: "mint",
     severity: "low",
     title: "Minting capability detected",
-    pattern: /\\b(mint|_mint)\\s*\\(/,
+    pattern: /\b(mint|_mint)\s*\(/,
     explanation: "Review who can mint, supply caps, and effects on collateral/share accounting.",
     confidence: "medium",
     weight: 1
   },
   {
-    id: "delegate",
+    id: "arbitrary-target",
     severity: "medium",
-    title: "Arbitrary target parameter near external execution",
-    pattern: /\\b(target|implementation|router|callee)\\b[\\s\\S]{0,220}\\.(call|delegatecall)\\s*\\(/i,
+    title: "Execution target near low-level call",
+    pattern: /\b(target|implementation|router|callee)\b[\s\S]{0,220}\.(call|delegatecall)\s*\(/i,
     explanation: "Review whether an untrusted caller can influence the execution target.",
     confidence: "low",
     weight: 2
@@ -105,7 +105,7 @@ export function runHeuristics(source: string): { findings: HeuristicFinding[]; s
 
 export function extractFunctionNames(source: string): string[] {
   const functions = new Set<string>();
-  const regex = /\\bfunction\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*\\(/g;
+  const regex = /\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
   for (const match of source.matchAll(regex)) {
     const name = match[1];
     if (name) functions.add(name);
