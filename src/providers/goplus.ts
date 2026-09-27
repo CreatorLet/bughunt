@@ -3,6 +3,7 @@ import { config, requireGoPlusAppKey, requireGoPlusAppSecret } from "../config.j
 import type { GoPlusTokenSecurity } from "../types.js";
 
 let configured = false;
+let authenticatedUntil = 0;
 
 function ensureConfigured(): void {
   if (configured) return;
@@ -18,6 +19,8 @@ function ensureConfigured(): void {
 async function ensureAccessToken(): Promise<void> {
   ensureConfigured();
 
+  if (Date.now() < authenticatedUntil) return;
+
   const result = await GoPlus.getAccessToken();
 
   if (!result?.result?.access_token) {
@@ -26,6 +29,13 @@ async function ensureAccessToken(): Promise<void> {
         (result?.message ?? "unknown error")
     );
   }
+
+  const expiresIn = Number(
+    (result.result as Record<string, unknown>)?.expires_in ?? 3600
+  );
+
+  authenticatedUntil =
+    Date.now() + Math.max(60, Math.min(expiresIn, 3600) - 60) * 1000;
 }
 
 export async function getTokenSecurity(
