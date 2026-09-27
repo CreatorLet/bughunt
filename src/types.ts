@@ -55,6 +55,40 @@ export interface HeuristicFinding {
   confidence: "high" | "medium" | "low";
 }
 
+export interface AbiItem {
+  type?: string;
+  name?: string;
+  stateMutability?: string;
+  inputs?: unknown[];
+  outputs?: unknown[];
+  [key: string]: unknown;
+}
+
+export interface FunctionSurface {
+  name: string;
+  kind:
+    | "money-moving"
+    | "privileged"
+    | "financial-state"
+    | "external-execution";
+  weight: number;
+}
+
+export interface ScanCandidate {
+  protocolName: string;
+  slug?: string;
+  category?: string;
+  tvl: number;
+  address?: string;
+  addressSource?: "defillama";
+  audits?: number | string;
+  url?: string;
+  contract?: ContractResearch;
+  screenScore: number;
+  aiSelected: boolean;
+  aiSkippedReason?: string;
+}
+
 export interface DeepSeekUsage {
   prompt_tokens?: number;
   completion_tokens?: number;
