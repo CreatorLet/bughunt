@@ -14,7 +14,10 @@
     "node": ">=20"
   },
   "dependencies": {
-    "dotenv": "^17.2.2",
+    "dotenv": "^17.2.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.5.2",
     "tsx": "^4.20.5",
     "typescript": "^5.9.2"
   }
