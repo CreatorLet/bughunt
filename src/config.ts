@@ -23,7 +23,7 @@ export const config = {
   goPlusAppSecret: process.env.GOPLUS_APP_SECRET?.trim() || "",
   minTvl: optionalNumber("DEFAULT_MIN_TVL", 50000),
   maxTvl: optionalNumber("DEFAULT_MAX_TVL", 1000000),
-  protocolLimit: Math.max(1, Math.floor(optionalNumber("DEFAULT_PROTOCOL_LIMIT", 25)))
+  protocolLimit: Math.max(1, Math.floor(optionalNumber("DEFAULT_PROTOCOL_LIMIT", 20)))
 };
 
 export function requireDeepSeek(): string { return required("DEEPSEEK_API_KEY"); }
