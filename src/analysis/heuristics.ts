@@ -50,10 +50,10 @@ const RULES: Rule[] = [
   {
     id: "upgrade",
     severity: "medium",
-    title: "Upgrade-related functionality present",
-    pattern: /\b(upgradeTo|upgrade|_authorizeUpgrade|UUPS|TransparentUpgradeableProxy)\b/i,
+    title: "Upgrade entry point detected",
+    pattern: /\bfunction\s+(upgradeTo|upgradeToAndCall|upgradeImplementation|_authorizeUpgrade)\s*\(/i,
     explanation: "Review who can upgrade and how initialization and storage compatibility are protected.",
-    confidence: "medium",
+    confidence: "high",
     weight: 2
   },
   {
@@ -68,10 +68,10 @@ const RULES: Rule[] = [
   {
     id: "mint",
     severity: "low",
-    title: "Minting capability detected",
-    pattern: /\b(mint|_mint)\s*\(/,
+    title: "Externally callable mint-related function detected",
+    pattern: /\bfunction\s+[A-Za-z_][A-Za-z0-9_]*mint[A-Za-z0-9_]*\s*\(/i,
     explanation: "Review who can mint, supply caps, and effects on collateral/share accounting.",
-    confidence: "medium",
+    confidence: "high",
     weight: 1
   },
   {
@@ -85,12 +85,21 @@ const RULES: Rule[] = [
   }
 ];
 
+function stripComments(source: string): string {
+  return source
+    .replace(/\/\/[^\n\r]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
 export function runHeuristics(source: string): { findings: HeuristicFinding[]; score: number } {
+  const scanSource = stripComments(source);
   const findings: HeuristicFinding[] = [];
   let score = 0;
+
   for (const rule of RULES) {
-    const match = source.match(rule.pattern);
+    const match = scanSource.match(rule.pattern);
     if (!match) continue;
+
     findings.push({
       id: rule.id,
       severity: rule.severity,
@@ -100,15 +109,18 @@ export function runHeuristics(source: string): { findings: HeuristicFinding[]; s
     });
     score += rule.weight;
   }
+
   return { findings, score };
 }
 
 export function extractFunctionNames(source: string): string[] {
   const functions = new Set<string>();
   const regex = /\bfunction\s+([A-Za-z_][A-Za-z0-9_]*)\s*\(/g;
+
   for (const match of source.matchAll(regex)) {
     const name = match[1];
     if (name) functions.add(name);
   }
+
   return [...functions].sort();
 }
