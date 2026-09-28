@@ -108,14 +108,18 @@ function collectAddressStrings(
       const lowerPath = path.toLowerCase();
       const lowerContext = context.toLowerCase();
 
-      let score = 40;
+      const protocolLikePath =
+        /(address|contract|router|factory|vault|pool|gauge|masterchef|staking|implementation|treasury)/.test(
+          lowerPath
+        );
+
+      const tokenLikePath =
+        /(tokenbreakdowns?|coingecko|gecko_id|logo|prices?)/.test(lowerPath);
+
+      if (!protocolLikePath || tokenLikePath) continue;
+
+      let score = 65;
       if (/\b(bsc|binance|bnb smart chain)\b/.test(lowerContext)) score += 35;
-      if (/(address|contract|router|factory|vault|pool|gauge|masterchef|staking|implementation)/.test(lowerPath)) {
-        score += 25;
-      }
-      if (/(token|symbol|gecko|coingecko|logo)/.test(lowerPath)) {
-        score -= 15;
-      }
 
       out.push({
         address: match[0],
@@ -239,7 +243,14 @@ export async function discoverBscContractAddresses(
     }
   }
 
-  if (candidates.length === 0 || candidates.length < maxCandidates) {
+  const ranked = uniqueAddresses(candidates);
+
+  // GitHub is the fallback for protocols whose DeFiLlama metadata does not
+  // expose enough protocol-level BSC addresses. It is also useful when the
+  // detail endpoint only exposes one low-confidence address.
+  const authoritative = ranked.filter((item) => item.score >= 90);
+
+  if (authoritative.length < maxCandidates) {
     candidates.push(...(await discoverFromGithub(protocol.github)));
   }
 
