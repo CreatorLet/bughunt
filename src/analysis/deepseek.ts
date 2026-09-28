@@ -46,9 +46,8 @@ export async function analyzeWithDeepSeek(input: {
 }): Promise<DeepSeekAnalysis> {
   const apiKey = requireDeepSeek();
 
-  // Keep the first AI pass economical. A later stage can analyze individual
-  // functions more deeply after this screening pass.
-  const source = input.source.slice(0, input.maxSourceChars ?? 60000);
+  // Bound source size to keep requests manageable while preserving full-contract context for normal-sized contracts.
+  const source = input.source.slice(0, input.maxSourceChars ?? 100000);
 
   const system = [
     "You are Bughunt's deep smart-contract security researcher.",
