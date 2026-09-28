@@ -230,11 +230,11 @@ export async function discoverBscContractAddresses(
   protocol: DefiLlamaProtocol,
   maxCandidates = 2
 ): Promise<ContractAddressCandidate[]> {
-  const candidates: ContractAddressCandidate[] = [
-    ...rawProtocolAddresses(protocol)
-  ];
+  const candidates: ContractAddressCandidate[] = rawProtocolAddresses(protocol);
 
-  if (protocol.slug) {
+  // DeFiLlama's top-level address is the cheapest and strongest signal.
+  // Only fall back to the protocol detail endpoint when it is missing.
+  if (candidates.length === 0 && protocol.slug) {
     try {
       const detail = await getProtocol(protocol.slug);
       collectAddressStrings(detail, "protocol", candidates);
@@ -244,13 +244,13 @@ export async function discoverBscContractAddresses(
   }
 
   const ranked = uniqueAddresses(candidates);
+  const hasTopLevelDefiLlamaAddress = ranked.some(
+    (item) => item.source === "defillama" && item.score >= 90
+  );
 
-  // GitHub is the fallback for protocols whose DeFiLlama metadata does not
-  // expose enough protocol-level BSC addresses. It is also useful when the
-  // detail endpoint only exposes one low-confidence address.
-  const authoritative = ranked.filter((item) => item.score >= 90);
-
-  if (authoritative.length < maxCandidates) {
+  // GitHub is the expensive fallback for protocols whose public DeFiLlama
+  // metadata does not expose a usable BSC contract address.
+  if (!hasTopLevelDefiLlamaAddress && ranked.length < maxCandidates) {
     candidates.push(...(await discoverFromGithub(protocol.github)));
   }
 
