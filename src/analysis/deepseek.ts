@@ -3,6 +3,8 @@ import type { DeepSeekAnalysis, DeepSeekUsage } from "../types.js";
 
 const BASE_URL = "https://api.deepseek.com";
 const MODEL = "deepseek-flash";
+const MAX_SOURCE_CHARS = 100000;
+const MAX_OUTPUT_TOKENS = 12000;
 
 interface DeepSeekResponse {
   id?: string;
@@ -16,12 +18,15 @@ interface DeepSeekResponse {
   usage?: DeepSeekUsage;
 }
 
-function parseJson(text: string): unknown {
+function parseJson(text: string): Record<string, unknown> {
   const fenced = text.match(/\`\`\`(?:json)?\s*([\s\S]*?)\`\`\`/i);
   const candidate = fenced?.[1]?.trim() ?? text.trim();
 
   try {
-    return JSON.parse(candidate);
+    const parsed = JSON.parse(candidate) as unknown;
+    if (parsed && typeof parsed === "object") {
+      return parsed as Record<string, unknown>;
+    }
   } catch {}
 
   const first = candidate.indexOf("{");
@@ -29,54 +34,65 @@ function parseJson(text: string): unknown {
 
   if (first >= 0 && last > first) {
     try {
-      return JSON.parse(candidate.slice(first, last + 1));
+      const parsed = JSON.parse(candidate.slice(first, last + 1)) as unknown;
+      if (parsed && typeof parsed === "object") {
+        return parsed as Record<string, unknown>;
+      }
     } catch {}
   }
 
-  return { raw: text };
+  throw new Error("DeepSeek returned incomplete or invalid JSON.");
 }
 
-export async function analyzeWithDeepSeek(input: {
-  address: string;
-  contractName?: string;
-  source: string;
-  heuristicFindings: unknown[];
-  maxSourceChars?: number;
-  context?: Record<string, unknown>;
-}): Promise<DeepSeekAnalysis> {
-  const apiKey = requireDeepSeek();
+function buildSystemPrompt(compactRetry: boolean): string {
+  const mode = compactRetry
+    ? [
+        "This is a compact retry because a previous response was truncated.",
+        "Keep every field concise.",
+        "Return at most 8 findings and at most 3 manual_tests.",
+        "Do not repeat the source code in evidence.",
+        "Use one or two sentences per finding field."
+      ]
+    : [
+        "Perform a systematic and comprehensive defensive review.",
+        "Look for as many concrete bugs as the supplied code supports."
+      ];
 
-  // Bound source size to keep requests manageable while preserving full-contract context for normal-sized contracts.
-  const source = input.source.slice(0, input.maxSourceChars ?? 100000);
-
-  const system = [
+  return [
     "You are Bughunt's deep smart-contract security researcher.",
-    "Perform a systematic defensive review of the supplied Solidity contract.",
-    "Look for as many concrete bugs as the code supports, not merely the obvious pattern matches.",
+    "Target chain: BSC (chainId 56). All runtime assumptions and manual tests must be BSC-specific.",
+    "Review only the supplied contract/source and the supplied runtime context.",
+    ...mode,
     "Reason about permissions, state transitions, accounting, token transfers, callbacks, external calls, oracle assumptions, signatures, upgradeability, initialization, rounding, precision, price manipulation, MEV-sensitive logic, denial of service, governance, and cross-function interactions.",
-    "For each finding, trace how the bug could become financially exploitable or otherwise materially impactful.",
+    "For each finding, trace how the issue could become financially exploitable or otherwise materially impactful.",
     "Separate confirmed code behavior from assumptions that require runtime verification.",
-    "Describe an exploit path at the protocol-logic level: attacker capability, prerequisites, relevant contract operations, violated invariant, and impact.",
-    "Do not execute transactions or provide secrets/private keys. This is authorized defensive research and local/fork testing.",
-    "Do not claim a pattern is a vulnerability without tracing reachability and impact.",
+    "Do not call something a vulnerability merely because a privileged role can cause harm when compromised or because a standard ERC20 behavior is known. Classify those separately.",
+    "Each finding must include finding_type: vulnerability, privileged-risk, deployment-risk, known-standard, informational, or false-positive.",
+    "For direct vulnerabilities, explain an attacker path that does not assume the attacker already controls a privileged account unless the privilege itself is improperly obtainable.",
+    "For privileged-risk or deployment-risk findings, explicitly state why they are not unprivileged contract exploits.",
+    "Describe exploit paths at protocol-logic level only: attacker capability, prerequisites, relevant contract operations, violated invariant, and impact.",
+    "Do not execute transactions or provide secrets/private keys. Manual tests must be local/fork-only and must not instruct the user to send transactions to a live RPC.",
     "Return JSON only.",
     "Top-level keys: summary, findings, manual_tests.",
     "summary must contain overall_assessment, key_risk_areas, source_coverage.",
-    "Each finding must contain title, category, severity, confidence, affected_functions, evidence, root_cause, attacker_capabilities, prerequisites, exploit_path, violated_invariant_or_assumption, impact, exploitability_assessment, recommended_fix.",
+    "Each finding must contain title, finding_type, category, severity, confidence, affected_functions, evidence, root_cause, attacker_capabilities, prerequisites, exploit_path, violated_invariant_or_assumption, impact, exploitability_assessment, recommended_fix.",
     "Severity must be one of critical, high, medium, low, informational.",
     "Confidence must be high, medium, or low.",
-    "manual_tests must be concrete local/fork validation ideas.",
+    "manual_tests must be concrete local/fork validation ideas and must use BSC chainId 56.",
     "Include false-positive notes when the heuristic layer is misleading."
   ].join(" ");
+}
 
-  const user = JSON.stringify({
-    address: input.address,
-    contractName: input.contractName ?? null,
-    heuristicFindings: input.heuristicFindings,
-    context: input.context ?? {},
-    source
-  });
-
+async function requestAnalysis(
+  apiKey: string,
+  user: string,
+  compactRetry: boolean
+): Promise<{
+  result: Record<string, unknown>;
+  requestId?: string;
+  usage?: DeepSeekUsage;
+  finishReason?: string | null;
+}> {
   let response: Response;
 
   try {
@@ -92,10 +108,10 @@ export async function analyzeWithDeepSeek(input: {
         thinking: { type: "enabled" },
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: system },
+          { role: "system", content: buildSystemPrompt(compactRetry) },
           { role: "user", content: user }
         ],
-        max_tokens: 10000
+        max_tokens: MAX_OUTPUT_TOKENS
       })
     });
   } catch (error) {
@@ -118,7 +134,7 @@ export async function analyzeWithDeepSeek(input: {
   try {
     data = JSON.parse(body) as DeepSeekResponse;
   } catch {
-    throw new Error("DeepSeek returned invalid JSON.");
+    throw new Error("DeepSeek returned invalid response JSON.");
   }
 
   const choice = data.choices?.[0];
@@ -139,6 +155,53 @@ export async function analyzeWithDeepSeek(input: {
   return {
     result: parseJson(content),
     requestId: data.id,
-    usage: data.usage
+    usage: data.usage,
+    finishReason: choice?.finish_reason
+  };
+}
+
+export async function analyzeWithDeepSeek(input: {
+  address: string;
+  contractName?: string;
+  source: string;
+  heuristicFindings: unknown[];
+  maxSourceChars?: number;
+  context?: Record<string, unknown>;
+}): Promise<DeepSeekAnalysis> {
+  const apiKey = requireDeepSeek();
+  const source = input.source.slice(0, input.maxSourceChars ?? MAX_SOURCE_CHARS);
+
+  const user = JSON.stringify({
+    chain: "BSC",
+    chainId: "56",
+    address: input.address,
+    contractName: input.contractName ?? null,
+    heuristicFindings: input.heuristicFindings,
+    context: input.context ?? {},
+    source
+  });
+
+  try {
+    const first = await requestAnalysis(apiKey, user, false);
+
+    if (first.finishReason !== "length") {
+      return {
+        result: first.result,
+        requestId: first.requestId,
+        usage: first.usage
+      };
+    }
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.includes("incomplete or invalid JSON")) {
+      throw error;
+    }
+  }
+
+  const retry = await requestAnalysis(apiKey, user, true);
+
+  return {
+    result: retry.result,
+    requestId: retry.requestId,
+    usage: retry.usage
   };
 }
