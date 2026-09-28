@@ -1,0 +1,410 @@
+{
+  "generatedAt": "2026-09-28T20:40:23.465Z",
+  "chain": "BSC",
+  "chainId": "56",
+  "tvlRange": {
+    "min": 50000,
+    "max": 1000000
+  },
+  "protocolLimit": 7,
+  "aiLimit": 7,
+  "protocolsFound": 7,
+  "contractsAnalyzed": 2,
+  "aiAnalyzed": 2,
+  "candidates": [
+    {
+      "protocolName": "Topaz CL",
+      "slug": "topaz-cl",
+      "category": "Dexs",
+      "tvl": 926284.4799905439,
+      "address": "0xdf002282C1474C9592780618Adda7EaA99998Abd",
+      "addressSource": "defillama",
+      "audits": "2",
+      "url": "https://www.topazdex.com",
+      "screenScore": 18,
+      "aiSelected": true,
+      "contract": {
+        "address": "0xdf002282C1474C9592780618Adda7EaA99998Abd",
+        "contractName": "Topaz",
+        "sourceVerified": true,
+        "surfaceScore": 8,
+        "heuristicScore": 3,
+        "functionNames": [
+          "DOMAIN_SEPARATOR",
+          "allowance",
+          "approve",
+          "balanceOf",
+          "decimals",
+          "decreaseAllowance",
+          "eip712Domain",
+          "increaseAllowance",
+          "mint",
+          "minter",
+          "name",
+          "nonces",
+          "permit",
+          "setMinter",
+          "symbol",
+          "totalSupply",
+          "transfer",
+          "transferFrom"
+        ],
+        "functionSurfaces": [
+          {
+            "name": "mint",
+            "kind": "token-transfer",
+            "weight": 1
+          },
+          {
+            "name": "setMinter",
+            "kind": "privileged",
+            "weight": 5
+          },
+          {
+            "name": "transfer",
+            "kind": "token-transfer",
+            "weight": 1
+          },
+          {
+            "name": "transferFrom",
+            "kind": "token-transfer",
+            "weight": 1
+          }
+        ],
+        "goPlus": {
+          "token_name": "Topaz",
+          "token_symbol": "TOPAZ",
+          "is_open_source": "1",
+          "is_proxy": "0",
+          "is_mintable": "1",
+          "is_honeypot": "0",
+          "cannot_buy": "0",
+          "buy_tax": "",
+          "sell_tax": "",
+          "holder_count": "965",
+          "total_supply": "851916257.812491656354115201",
+          "creator_address": "0xd7e8557b8c78e131a9fa893ae12e8c2818234aea"
+        },
+        "rugpullSignals": {
+          "owner": {},
+          "privilege_withdraw": 0,
+          "withdraw_missing": 0,
+          "is_open_source": null,
+          "blacklist": 0,
+          "contract_name": "Topaz",
+          "selfdestruct": 0,
+          "is_proxy": 0,
+          "approval_abuse": 0
+        },
+        "aiAnalysis": {
+          "result": {
+            "raw": "{\n  \"summary\": {\n    \"overall_assessment\": \"Topaz is a simple ERC20Permit token with a privileged minter. No proxy or upgrade mechanism is present. The main risks are centralization of minting authority and a missing zero-address check in setMinter that can permanently disable minting and minter recovery. No unprivileged exploit path was found in the token contract itself. The heuristic upgrade finding is a false positive caused by OpenZeppelin library comments.\",\n    \"key_risk_areas\": [\n      \"Unlimited minting by the minter role\",\n      \"Minter transfer without timelock or two-step acceptance\",\n      \"Permanent denial of service by setting minter to address(0)\",\n      \"Unused owner variable and missing owner recovery capability\",\n      \"No event emitted on minter changes\"\n    ],\n    \"source_coverage\": \"Full source provided for Topaz.sol and inherited OpenZeppelin v4.9.x components: ERC20, ERC20Permit, EIP712, ECDSA, Counters, ShortStrings, StorageSlot, Math, and related interfaces. No upgradeable proxy or initializer logic is present.\"\n  },\n  \"findings\": [\n    {\n      \"title\": \"Unlimited minting and minter transfer centralization\",\n      \"category\": \"Centralization / Access Control\",\n      \"severity\": \"high\",\n      \"confidence\": \"high\",\n      \"affected_functions\": [\"mint\", \"setMinter\"],\n      \"evidence\": \"mint(address,uint256) only checks msg.sender == minter and has no supply cap. setMinter(address) lets the current minter replace itself with any address, with no timelock, owner approval, or event. The owner variable is declared and set in the constructor but never used.\",\n      \"root_cause\": \"Privileged minter role has unilateral and unbounded minting rights plus the ability to transfer the role. There is no cap, timelock, multisig enforcement, or owner fallback.\",\n      \"attacker_capabilities\": \"If the minter private key is compromised or the minter contract is exploited, the attacker can mint arbitrary tokens and transfer the minter role.\",\n      \"prerequisites\": \"Control of the current minter address, obtained via key compromise, contract exploit, or social engineering.\",\n      \"exploit_path\": \"1. Attacker gains control of minter. 2. Calls mint(attacker, hugeAmount) to create arbitrary TOPAZ. 3. Sells TOPAZ into Topaz CL pools or other venues, draining paired assets. 4. Optionally calls setMinter(attacker) to retain control or setMinter(address(0)) to brick minting.\",\n      \"violated_invariant_or_assumption\": \"Total supply is expected to follow a protocol emission schedule, not arbitrary minting. The minter is assumed honest and secure.\",\n      \"impact\": \"Token price collapse, liquidity drain, and loss of value for LPs and holders. Given ~$926k TVL in Topaz CL, the full liquidity could be at risk.\",\n      \"exploitability_assessment\": \"High if the minter is an EOA or weakly secured contract. Not directly exploitable by an unprivileged user; requires compromise of the privileged minter role.\",\n      \"recommended_fix\": \"Use a timelock or multisig as minter, add a supply cap if appropriate, implement a two-step minter transfer with zero-address check, emit an event, and consider an owner-gated recovery function.\"\n    },\n    {\n      \"title\": \"Minter can permanently brick minting by setting minter to zero address\",\n      \"category\": \"Denial of Service / Access Control\",\n      \"severity\": \"medium\",\n      \"confidence\": \"high\",\n      \"affected_functions\": [\"setMinter\", \"mint\"],\n      \"evidence\": \"setMinter(address _minter) external { if (msg.sender != minter) revert NotMinter(); minter = _minter; } contains no require(_minter != address(0)).\",\n      \"root_cause\": \"Missing zero-address validation in a privileged setter.\",\n      \"attacker_capabilities\": \"The current minter, or an attacker who compromises the minter, can call setMinter(address(0)).\",\n      \"prerequisites\": \"Control of the current minter address.\",\n      \"exploit_path\": \"1. Current minter calls setMinter(address(0)). 2. minter becomes address(0). 3. All subsequent mint and setMinter calls revert because msg.sender != address(0) is always true. 4. Minting and minter recovery are permanently disabled.\",\n      \"violated_invariant_or_assumption\": \"The minter should always be a valid address capable of invoking mint and setMinter.\",\n      \"impact\": \"Cannot mint new tokens. Protocol emission or reward mechanisms relying on minting halt. Existing transfers still work, but the token becomes non-inflationary and the minter role is permanently locked.\",\n      \"exploitability_assessment\": \"Medium: requires privileged access, but the impact is permanent and can be triggered accidentally or maliciously by a compromised minter.\",\n      \"recommended_fix\": \"Add require(_minter != address(0)) and emit a MinterChanged event. Prefer a two-step minter transfer with pending minter acceptance.\"\n    },\n    {\n      \"title\": \"Unused owner variable and missing owner access control\",\n      \"category\": \"Access Control / Code Quality\",\n      \"severity\": \"low\",\n      \"confidence\": \"high\",\n      \"affected_functions\": [\"constructor\", \"setMinter\", \"mint\"],\n      \"evidence\": \"address private owner; is set in the constructor to msg.sender but never read or used. ITopaz declares error NotOwner() but it is never used in Topaz.sol.\",\n      \"root_cause\": \"Dead owner role. Intended owner-only recovery or admin functions appear to have been omitted.\",\n      \"attacker_capabilities\": \"No direct exploit path, but the owner cannot perform any privileged action.\",\n      \"prerequisites\": \"None.\",\n      \"exploit_path\": \"Not directly exploitable. If protocol documentation or the ITopaz interface imply that the owner can recover from a compromised minter, that expectation is false. The owner has no power to change minter or mint.\",\n      \"violated_invariant_or_assumption\": \"An owner role is expected to provide administrative or recovery capability.\",\n      \"impact\": \"If the minter is compromised or set to address(0), the owner cannot recover. Governance and operational risk.\",\n      \"exploitability_assessment\": \"Informational/low; no direct financial exploit.\",\n      \"recommended_fix\": \"Remove the unused owner variable or implement the intended owner-gated functions with proper access control and tests.\"\n    },\n    {\n      \"title\": \"Lack of event emission on setMinter\",\n      \"category\": \"Monitoring / Transparency\",\n      \"severity\": \"informational\",\n      \"confidence\": \"high\",\n      \"affected_functions\": [\"setMinter\"],\n      \"evidence\": \"setMinter(address _minter) changes minter without emitting an event.\",\n      \"root_cause\": \"Missing event declaration and emission.\",\n      \"attacker_capabilities\": \"None directly; affects off-chain monitoring.\",\n      \"prerequisites\": \"None.\",\n      \"exploit_path\": \"Not exploitable by itself, but off-chain watchers cannot easily detect minter changes, delaying response to a compromised minter.\",\n      \"violated_invariant_or_assumption\": \"Privileged state changes should be observable via events.\",\n      \"impact\": \"Reduced transparency and delayed detection of malicious minter changes.\",\n      \"exploitability_assessment\": \"Informational.\",\n      \"recommended_fix\": \"Emit event MinterChanged(address indexed oldMinter, address indexed newMinter).\"\n    },\n    {\n      \"title\": \"Heuristic false positive: upgrade-related functionality\",\n      \"category\": \"False Positive\",\n      \"severity\": \"informational\",\n      \"confidence\": \"high\",\n      \"affected_functions\": [],\n      \"evidence\": \"Heuristic matched the string 'upgrade' in OpenZeppelin ERC20Permit/EIP712 comments such as 'upgradeable transpiler' and 'smart contract upgrade'. No proxy, initializer, or upgrade function exists in Topaz.sol. goPlus reports is_pro"
+          },
+          "requestId": "2fec9dd4-0306-4189-b571-0db46a4ff30e",
+          "usage": {
+            "prompt_tokens": 22116,
+            "completion_tokens": 10000,
+            "total_tokens": 32116,
+            "prompt_tokens_details": {
+              "cached_tokens": 0
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 8202
+            },
+            "prompt_cache_hit_tokens": 0,
+            "prompt_cache_miss_tokens": 22116
+          }
+        }
+      }
+    },
+    {
+      "protocolName": "Wompie",
+      "slug": "wompie",
+      "category": "Yield",
+      "tvl": 927634.5953316139,
+      "address": "0xD06716E1Ff2E492Cc5034c2E81805562dd3b45fa",
+      "addressSource": "defillama",
+      "audits": "2",
+      "url": "https://www.magpiexyz.io",
+      "screenScore": 7,
+      "aiSelected": true,
+      "contract": {
+        "address": "0xD06716E1Ff2E492Cc5034c2E81805562dd3b45fa",
+        "contractName": "MGP",
+        "sourceVerified": true,
+        "surfaceScore": 2,
+        "heuristicScore": 3,
+        "functionNames": [
+          "DOMAIN_SEPARATOR",
+          "allowance",
+          "approve",
+          "balanceOf",
+          "decimals",
+          "decreaseAllowance",
+          "increaseAllowance",
+          "name",
+          "nonces",
+          "permit",
+          "symbol",
+          "totalSupply",
+          "transfer",
+          "transferFrom"
+        ],
+        "functionSurfaces": [
+          {
+            "name": "transfer",
+            "kind": "token-transfer",
+            "weight": 1
+          },
+          {
+            "name": "transferFrom",
+            "kind": "token-transfer",
+            "weight": 1
+          }
+        ],
+        "goPlus": {
+          "token_name": "Magpie Token",
+          "token_symbol": "MGP",
+          "is_open_source": "1",
+          "is_proxy": "0",
+          "is_mintable": "0",
+          "is_honeypot": "0",
+          "cannot_buy": "0",
+          "cannot_sell_all": "0",
+          "buy_tax": "0",
+          "sell_tax": "0",
+          "holder_count": "13936",
+          "total_supply": "1000000000",
+          "creator_address": "0x0cdb34e6a4d635142bb92fe403d38f636bbb77b8"
+        },
+        "rugpullSignals": {
+          "owner": {},
+          "privilege_withdraw": 0,
+          "withdraw_missing": 0,
+          "is_open_source": 1,
+          "blacklist": 0,
+          "contract_name": "MGP",
+          "selfdestruct": 0,
+          "is_proxy": 0,
+          "approval_abuse": 0
+        },
+        "aiAnalysis": {
+          "result": {
+            "summary": {
+              "overall_assessment": "MGP is a fixed-supply, non-upgradeable OpenZeppelin ERC20 with ERC20Permit (EIP-2612). The only privileged operation is the constructor mint to the deployment recipient. No external/public mint, pause, blacklist, fee, upgrade, or arbitrary external call exists. The heuristic findings for upgradeability and minting are false positives: 'upgrade' appears only in OZ comments, and `_mint` is reachable only once in the constructor. No critical or high-severity contract-level vulnerability was identified in the supplied source. The primary material risk is deployment/configuration risk: the entire supply is minted to one address, so recipient control, key management, and whether that address is a contract that can transfer tokens determine real-world concentration risk.",
+              "key_risk_areas": [
+                "Initial supply concentration: 1,000,000,000 MGP is minted to `_receipient` in the constructor; if this is an EOA or a compromised key, all supply can be moved at once.",
+                "No code-level upgradeability or post-deployment minting: upgrade/mint heuristics are triggered by OZ comment text and constructor `_mint`, not by reachable external functions.",
+                "Standard ERC20 allowance race on `approve`: users changing a non-zero allowance to another non-zero value can be front-run; use `increaseAllowance`/`decreaseAllowance` or set to zero first.",
+                "Dependency uses draft-ERC20Permit from OZ 4.6/4.7; the permit implementation is standard and appears correct, but modern deployments prefer the non-draft `ERC20Permit` path."
+              ],
+              "source_coverage": "Reviewed contracts/Mgp.sol and inherited OpenZeppelin ERC20, draft-ERC20Permit, draft-IERC20Permit, EIP712, ECDSA, Counters, Strings, Context, IERC20, and IERC20Metadata sources. Focused on constructor mint, transfer/transferFrom accounting, permit signature verification, nonce handling, domain separator construction, allowance logic, and absence of upgrade/proxy/initializer surfaces."
+            },
+            "findings": [
+              {
+                "title": "Heuristic 'upgrade-related functionality' is a false positive",
+                "category": "false-positive / upgradeability",
+                "severity": "informational",
+                "confidence": "high",
+                "affected_functions": [],
+                "evidence": "The matched text 'upgrade' appears only in OpenZeppelin comments inside draft-ERC20Permit.sol ('upgradeable transpiler') and EIP712.sol ('smart contract upgrade'). Mgp.sol has no proxy pattern, no initializer, no implementation slot, no `upgradeTo`/`upgradeToAndCall`, no admin role, and no delegatecall/selfdestruct. GoPlus reports is_proxy=0.",
+                "root_cause": "Heuristic keyword matching against imported library comments, not reachable contract logic.",
+                "attacker_capabilities": "None. There is no upgrade entry point to call or abuse.",
+                "prerequisites": "None. Exploitability requires an upgrade function that does not exist.",
+                "exploit_path": "No reachable exploit path. An attacker cannot alter code or storage because no upgrade mechanism is exposed.",
+                "violated_invariant_or_assumption": "None. The deployed bytecode is immutable for the logic present.",
+                "impact": "No security impact. The finding would mislead a reviewer into expecting an upgrade admin surface that is absent.",
+                "exploitability_assessment": "Not exploitable. Confirmed false positive.",
+                "recommended_fix": "No contract change. Tune heuristics to distinguish OZ comment mentions from actual proxy/initializer code, or annotate this source as non-upgradeable."
+              },
+              {
+                "title": "Heuristic 'minting capability' is a false positive beyond constructor mint",
+                "category": "false-positive / minting",
+                "severity": "informational",
+                "confidence": "high",
+                "affected_functions": [
+                  "constructor(address,uint256)"
+                ],
+                "evidence": "`_mint(_receipient, _totalSupply)` is called only inside the MGP constructor. There is no external/public mint function, no `onlyOwner` mint, no supply cap setter, and no role that can call `_mint` after deployment. GoPlus reports is_mintable=0. totalSupply is fixed after construction.",
+                "root_cause": "Heuristic matched the internal `_mint(` call that is part of one-time construction, not a post-deployment minting surface.",
+                "attacker_capabilities": "None after deployment.",
+                "prerequisites": "None.",
+                "exploit_path": "No post-deployment mint path exists. The constructor defines initial supply and cannot be called again.",
+                "violated_invariant_or_assumption": "None. Total supply is fixed after construction.",
+                "impact": "No security impact for third-party holders after deployment. Only the initial distribution allocation is relevant.",
+                "exploitability_assessment": "Not exploitable. Confirmed false positive.",
+                "recommended_fix": "No contract change. For monitoring, inspect the constructor arguments to confirm the recipient and initial supply, and continue to verify totalSupply remains constant."
+              },
+              {
+                "title": "Initial supply is entirely concentrated in the constructor recipient",
+                "category": "centralization / deployment assumption",
+                "severity": "low",
+                "confidence": "medium",
+                "affected_functions": [
+                  "constructor(address,uint256)"
+                ],
+                "evidence": "constructor(address _receipient, uint256 _totalSupply) { _mint(_receipient, _totalSupply); } No transfer restrictions, vesting, lockup, or multi-signature logic exists in the token. The holder can transfer the entire supply immediately unless `_receipient` is a contract with its own restrictions.",
+                "root_cause": "Deployment design choice: one address receives 100% of the 1,000,000,000 MGP supply. The token contract enforces no distribution or lockup.",
+                "attacker_capabilities": "An attacker who compromises the private key of `_receipient` can transfer the full supply. If `_receipient` is a malicious or compromised contract, the same applies subject to its logic.",
+                "prerequisites": "The recipient is an EOA or a contract controlled by a single key, and that key is leaked or malicious. Runtime verification is required to identify `_receipient` and its ownership/multisig configuration.",
+                "exploit_path": "Compromise recipient key -> call `transfer` to move all MGP to attacker-controlled addresses -> sell into liquidity or use voting/governance power. The contract itself does not prevent this because the recipient owns the tokens.",
+                "violated_invariant_or_assumption": "Investors may assume the initial allocation is locked, vested, or multisig-controlled. The token contract does not enforce any such invariant.",
+                "impact": "Potentially severe market and governance impact if the recipient key is not properly secured. This is a deployment/operational risk, not a bug in the MGP bytecode.",
+                "exploitability_assessment": "Deployment-dependent and not exploitable via the token contract alone. Confidence is medium because recipient control configuration is off-chain/runtime data.",
+                "recommended_fix": "Verify `_receipient` is a multisig or timelock/treasury contract, confirm lockups if promised, and document that the token contract itself provides no vesting or spending limits. Consider a distribution/vesting contract if lockups are required."
+              },
+              {
+                "title": "Standard ERC20 allowance race on approve",
+                "category": "ERC20 semantics / user-safety",
+                "severity": "informational",
+                "confidence": "high",
+                "affected_functions": [
+                  "approve",
+                  "increaseAllowance",
+                  "decreaseAllowance",
+                  "transferFrom"
+                ],
+                "evidence": "`_approve` directly sets `_allowances[owner][spender] = amount`. This follows the ERC20 standard. A spender can front-run an owner's `approve` transaction that changes a non-zero allowance to another non-zero value, spending the old allowance and then the new allowance.",
+                "root_cause": "ERC20 `approve` semantics are inherently racy for non-zero-to-non-zero changes. This is a known ERC20 interface issue, not an MGP-specific implementation bug.",
+                "attacker_capabilities": "A malicious spender with an existing non-zero allowance can monitor the mempool and call `transferFrom` at the old allowance before the owner's new `approve` confirms.",
+                "prerequisites": "Owner uses `approve` to change an existing non-zero allowance to another non-zero value without first setting it to zero.",
+                "exploit_path": "Owner submits approve(spender, newAmount). Spender front-runs with transferFrom(owner, attacker, oldAmount). Owner's approve sets newAmount. Spender then spends newAmount. The owner loses up to oldAmount + newAmount of spending permission, though tokens are only taken if the spender is malicious.",
+                "violated_invariant_or_assumption": "The owner assumes changing allowance atomically revokes the old allowance. ERC20 does not guarantee this.",
+                "impact": "The spender can spend more than the owner intended when the owner changes an allowance directly. This is a well-known ERC20 user-safety issue, not a contract defect.",
+                "exploitability_assessment": "Real but user-dependent and standard across ERC20 tokens. Not specific to MGP.",
+                "recommended_fix": "No contract change required for ERC20 compliance. Users should set allowance to zero before changing to a new non-zero value, or use `increaseAllowance`/`decreaseAllowance`. Integrators should prefer permit or exact-amount approvals."
+              },
+              {
+                "title": "Dependency uses draft-ERC20Permit rather than finalized ERC20Permit",
+                "category": "dependency / code quality",
+                "severity": "informational",
+                "confidence": "high",
+                "affected_functions": [
+                  "permit",
+                  "nonces",
+                  "DOMAIN_SEPARATOR"
+                ],
+                "evidence": "contracts/Mgp.sol imports '@openzeppelin/contracts/token/ERC20/extensions/draft-ERC20Permit.sol'. The permit implementation itself is standard: deadline check, nonce consumption, EIP712 domain, ECDSA.recover with low-s and v checks, and signer == owner. No cryptographic flaw was found in the supplied version.",
+                "root_cause": "Project adopted an OZ draft extension path. The draft naming is legacy, not inherently vulnerable.",
+                "attacker_capabilities": "None demonstrated through this dependency in the supplied code.",
+                "prerequisites": "None for exploitability. This is a maintenance/versioning observation.",
+                "exploit_path": "No exploit path identified in the supplied permit code. Signature replay is prevented by per-owner nonces and chain/contract-bound EIP712 domain separator.",
+                "violated_invariant_or_assumption": "None in current code. Newer OZ releases may include hardening or API cleanup.",
+                "impact": "No direct security impact. Informational dependency-hygiene issue.",
+                "exploitability_assessment": "Not exploitable based on supplied source.",
+                "recommended_fix": "When redeploying or upgrading tooling, prefer the finalized '@openzeppelin/contracts/token/ERC20/extensions/ERC20Permit.sol' path and confirm no ABI/storage differences matter for integrators."
+              }
+            ],
+            "manual_tests": [
+              {
+                "test": "Verify fixed supply and recipient on fork",
+                "purpose": "Confirm no minting surface and identify initial allocation.",
+                "method": "Fork Ethereum mainnet at the deployment block or latest. Run `cast call 0xD06716E1Ff2E492Cc5034c2E81805562dd3b45fa \"totalSupply()(uint256)\" --rpc-url $ETH_RPC`; confirm 1000000000000000000000000000. Fetch the deployment transaction, decode constructor arguments, and call `balanceOf(recipient)` to confirm the entire supply is at that address."
+              },
+              {
+                "test": "Confirm no proxy/upgradeability",
+                "purpose": "Rule out hidden upgrade surface.",
+                "method": "Run `cast code 0xD06716E1Ff2E492Cc5034c2E81805562dd3b45fa --rpc-url $ETH_RPC` and check for proxy bytecode patterns. Read EIP-1967 implementation slot `0x360894a13ba1a3210667c828492db98dca3e2076cc3735a920a3ca505d382bbc` and admin slot `0xb53127684a568b3173ae13b9f8a6016e243e63b6e8ee1178d6a717850b5d6103`; both should be zero. Confirm no `upgradeTo`, `upgradeToAndCall`, or initializer selectors in the ABI."
+              },
+              {
+                "test": "Confirm absence of external mint function",
+                "purpose": "Rule out post-deployment minting.",
+                "method": "Inspect ABI and bytecode for selectors `mint(address,uint256)` (0x40c10f19), `mint(uint256)` etc. Use `cast interface` or Etherscan ABI. Attempt `cast send 0xD067... \"mint(address,uint256)\" <addr> 1 --rpc-url $ETH_RPC` from impersonated account; expect revert because no such function exists."
+              },
+              {
+                "test": "Validate permit signature flow and nonce replay protection",
+                "purpose": "Confirm EIP-2612 behavior and nonce increment.",
+                "method": "Using a local fork, create an EIP-712 Permit signature from a funded owner for spender and value. Call `permit(owner, spender, value, deadline, v, r, s)`; confirm `allowance(owner, spender)` becomes value and `nonces(owner)` increments. Replay the same signature; expect revert with 'ERC20Permit: invalid signature' due to nonce mismatch. Test an expired deadline and an invalid `v`/`s`; expect reverts.",
+                "expected": "First permit succeeds; replay and expired/invalid signatures revert."
+              },
+              {
+                "test": "Validate EIP-712 domain separator",
+                "purpose": "Confirm chain and contract binding.",
+                "method": "Compute expected separator: `keccak256(abi.encode(keccak256(\"EIP712Domain(string name,string version,uint256 chainId,address verifyingContract)\"), keccak256(\"Magpie Token\"), keccak256(\"1\"), chainid, 0xD067...))`. Compare with `cast call 0xD067... \"DOMAIN_SEPARATOR()(bytes32)\" --rpc-url $ETH_RPC` on the same chainid. On a local fork with a different chainid, the contract should rebuild the separator dynamically."
+              },
+              {
+                "test": "Check recipient contract transferability if recipient is a contract",
+                "purpose": "Assess whether initial supply is locked or movable.",
+                "method": "If the constructor recipient is a contract, inspect its bytecode/ABI for transfer functions, timelocks, vesting, or ownership. Impersonate the recipient on a fork and attempt to `transfer` a small amount of MGP; observe whether the recipient contract permits it."
+              }
+            ]
+          },
+          "requestId": "1e99aa53-f091-4804-8b20-651de4c1df74",
+          "usage": {
+            "prompt_tokens": 13593,
+            "completion_tokens": 8390,
+            "total_tokens": 21983,
+            "prompt_tokens_details": {
+              "cached_tokens": 128
+            },
+            "completion_tokens_details": {
+              "reasoning_tokens": 5227
+            },
+            "prompt_cache_hit_tokens": 128,
+            "prompt_cache_miss_tokens": 13465
+          }
+        }
+      }
+    },
+    {
+      "protocolName": "deBridge",
+      "slug": "debridge",
+      "category": "Bridge",
+      "tvl": 984425.3441153341,
+      "audits": "2",
+      "url": "https://app.debridge.com",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    },
+    {
+      "protocolName": "LlamaPay",
+      "slug": "llamapay",
+      "category": "Payments",
+      "tvl": 956254.8167008653,
+      "audits": "2",
+      "url": "https://llamapay.io",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    },
+    {
+      "protocolName": "DOOAR V2",
+      "slug": "dooar-v2",
+      "category": "Dexs",
+      "tvl": 940995.8543674333,
+      "audits": "0",
+      "url": "https://beta.dooar.com/swap",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    },
+    {
+      "protocolName": "Solo Top",
+      "slug": "solo-top",
+      "category": "Yield",
+      "tvl": 932375.0771615282,
+      "audits": "2",
+      "url": "",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    },
+    {
+      "protocolName": "vfat.io",
+      "slug": "vfat.io",
+      "category": "Yield Aggregator",
+      "tvl": 921822.0988916024,
+      "audits": "2",
+      "url": "https://vfat.io/yield",
+      "screenScore": 0,
+      "aiSelected": false,
+      "aiSkippedReason": "DeFiLlama did not provide a usable BSC contract address.",
+      "contract": null
+    }
+  ]
+}
