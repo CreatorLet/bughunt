@@ -3,6 +3,7 @@ import path from "node:path";
 import { config } from "../config.js";
 import { analyzeWithDeepSeek } from "../analysis/deepseek.js";
 import { listBscProtocols } from "../providers/defillama.js";
+import { discoverBscContractAddresses } from "../providers/contract-discovery.js";
 import { getRugpullSignals } from "../providers/goplus.js";
 import { researchContract } from "./research.js";
 import type {
@@ -11,27 +12,6 @@ import type {
   DefiLlamaProtocol,
   ScanCandidate
 } from "../types.js";
-
-function extractBscAddress(protocol: DefiLlamaProtocol): string | undefined {
-  const raw = protocol.address?.trim();
-  if (!raw) return undefined;
-
-  const tokens = raw.split(/[\s,;]+/).filter(Boolean);
-
-  for (const token of tokens) {
-    const bscMatch = token.match(/^bsc:(0x[a-fA-F0-9]{40})$/i);
-    if (bscMatch?.[1]) return bscMatch[1];
-  }
-
-  // Some DeFiLlama entries expose a plain EVM address instead of a
-  // chain-prefixed address. Because this protocol is known to be present on
-  // BSC, we use it as a best-effort candidate and let Etherscan verify it.
-  for (const token of tokens) {
-    if (/^0x[a-fA-F0-9]{40}$/.test(token)) return token;
-  }
-
-  return undefined;
-}
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -154,6 +134,7 @@ function formatFinding(
 ): string[] {
   const lines = [
     `### Finding ${index + 1}: ${String(finding.title ?? "Untitled")}`,
+    `- Type: ${String(finding.finding_type ?? "unknown")}`,
     `- Severity: ${String(finding.severity ?? "unknown")}`,
     `- Confidence: ${String(finding.confidence ?? "unknown")}`,
     `- Category: ${String(finding.category ?? "unknown")}`
@@ -207,7 +188,7 @@ async function writeReport(
 
   const summary = {
     generatedAt: new Date().toISOString(),
-    chain: "BSC",
+    chain: config.chainName,
     chainId: config.chainId,
     tvlRange: { min: options.minTvl, max: options.maxTvl },
     protocolLimit: options.limit,
@@ -222,6 +203,7 @@ async function writeReport(
       tvl: candidate.tvl,
       address: candidate.address,
       addressSource: candidate.addressSource,
+      addressCandidates: candidate.addressCandidates ?? [],
       audits: candidate.audits,
       url: candidate.url,
       screenScore: candidate.screenScore,
@@ -252,11 +234,21 @@ async function writeReport(
       `${index + 1}. **${candidate.protocolName}** — $${candidate.tvl.toLocaleString()} — score ${candidate.screenScore}`
     );
     lines.push(`   - Address: ${candidate.address ?? "not discovered"}`);
+    lines.push(`   - Address source: ${candidate.addressSource ?? "none"}`);
     lines.push(`   - Category: ${candidate.category ?? "unknown"}`);
     lines.push(`   - Audits reported by DeFiLlama: ${candidate.audits ?? "unknown"}`);
 
+    if (candidate.addressCandidates?.length) {
+      lines.push(
+        "   - Address candidates: " +
+          candidate.addressCandidates
+            .map((item) => item.address + " [" + item.source + ", score " + item.score + "]")
+            .join("; ")
+      );
+    }
+
     if (!candidate.contract) {
-      lines.push("   - Status: no usable BSC contract address in DeFiLlama metadata");
+      lines.push("   - Status: no analyzed BSC contract was discovered");
     } else {
       const surfaces = (candidate.contract.functionSurfaces ?? [])
         .map((surface) => `${surface.name} [${surface.kind}]`)
@@ -268,9 +260,7 @@ async function writeReport(
       lines.push(
         `   - Interesting functions: ${surfaces || "none detected"}`
       );
-      lines.push(
-        `   - ${aiText(candidate.contract.aiAnalysis)}`
-      );
+      lines.push(`   - ${aiText(candidate.contract.aiAnalysis)}`);
 
       const aiFindings = getAiFindings(candidate.contract.aiAnalysis);
       if (aiFindings.length) {
@@ -312,39 +302,105 @@ export async function runBscScan(options: {
   const minTvl = options.minTvl ?? config.minTvl;
   const maxTvl = options.maxTvl ?? config.maxTvl;
   const limit = Math.max(1, Math.floor(options.limit ?? 20));
-  const aiLimit = Math.max(0, Math.floor(options.aiLimit ?? 5));
+  const aiLimit = Math.max(0, Math.floor(options.aiLimit ?? limit));
   const concurrency = Math.max(1, Math.floor(options.concurrency ?? 4));
 
   const protocols = await listBscProtocols(minTvl, maxTvl, limit);
 
-  const candidates: ScanCandidate[] = protocols.map((protocol) => {
-    const address = extractBscAddress(protocol);
+  const candidates: ScanCandidate[] = protocols.map((protocol) => ({
+    protocolName: protocol.name ?? protocol.slug ?? "Unknown",
+    slug: protocol.slug,
+    category: protocol.category,
+    tvl: Number(protocol.tvl ?? 0),
+    audits: protocol.audits,
+    url: protocol.url,
+    screenScore: 0,
+    aiSelected: false
+  }));
 
-    return {
-      protocolName: protocol.name ?? protocol.slug ?? "Unknown",
-      slug: protocol.slug,
-      category: protocol.category,
-      tvl: Number(protocol.tvl ?? 0),
-      address,
-      addressSource: address ? "defillama" : undefined,
-      audits: protocol.audits,
-      url: protocol.url,
-      screenScore: 0,
-      aiSelected: false
-    };
-  });
-
-  const analyzed = await mapWithConcurrency(
-    candidates.filter((candidate) => candidate.address),
-    concurrency,
+  const discovered = await mapWithConcurrency(
+    candidates,
+    Math.min(concurrency, candidates.length || 1),
     async (candidate) => {
+      const protocol = protocols.find(
+        (item: DefiLlamaProtocol) =>
+          (item.name ?? item.slug ?? "Unknown") === candidate.protocolName &&
+          item.slug === candidate.slug
+      );
+
+      if (!protocol) {
+        candidate.aiSkippedReason = "Protocol metadata could not be matched.";
+        return candidate;
+      }
+
       try {
-        candidate.contract = await researchContract(candidate.address as string, {
-          includeRugpull: false
+        candidate.addressCandidates = await discoverBscContractAddresses(protocol, 2);
+        const primary = candidate.addressCandidates[0];
+
+        if (!primary) {
+          candidate.aiSkippedReason =
+            "No BSC contract address discovered from DeFiLlama metadata/detail or protocol GitHub.";
+          return candidate;
+        }
+
+        candidate.address = primary.address;
+        candidate.addressSource = primary.source;
+
+        // DeFiLlama usually provides the most authoritative address. For fallback
+        // discovery, research up to two candidates and keep the most interesting
+        // verified contract rather than blindly trusting the first regex match.
+        const addressesToResearch = candidate.addressCandidates
+          .slice(0, primary.source === "defillama" ? 1 : 2);
+
+        const researched = await mapWithConcurrency(
+          addressesToResearch,
+          Math.min(2, addressesToResearch.length),
+          async (addressCandidate) => {
+            try {
+              return await researchContract(addressCandidate.address, {
+                includeRugpull: false
+              });
+            } catch {
+              return null;
+            }
+          }
+        );
+
+        const valid = researched.filter(
+          (value): value is ContractResearch => Boolean(value)
+        );
+
+        if (!valid.length) {
+          candidate.aiSkippedReason = "Discovered addresses could not be researched on Etherscan.";
+          return candidate;
+        }
+
+        valid.sort((a, b) => {
+          const aScore =
+            a.surfaceScore +
+            a.heuristicScore +
+            (a.sourceVerified ? 5 : 0) +
+            (a.functionSurfaces?.length ?? 0);
+          const bScore =
+            b.surfaceScore +
+            b.heuristicScore +
+            (b.sourceVerified ? 5 : 0) +
+            (b.functionSurfaces?.length ?? 0);
+          return bScore - aScore;
         });
+
+        candidate.contract = valid[0];
+        candidate.address = candidate.contract.address;
+
+        const selected = candidate.addressCandidates.find(
+          (item) => item.address.toLowerCase() === candidate.address?.toLowerCase()
+        );
+        if (selected) {
+          candidate.addressSource = selected.source;
+        }
       } catch (error) {
         candidate.aiSkippedReason =
-          "initial contract analysis failed: " +
+          "contract discovery failed: " +
           (error instanceof Error ? error.message : String(error));
       }
 
@@ -353,18 +409,13 @@ export async function runBscScan(options: {
     }
   );
 
-  const analyzedMap = new Map(
-    analyzed.map((candidate) => [candidate.protocolName + "|" + candidate.address, candidate])
+  const processed = new Map(
+    discovered.map((candidate) => [candidate.protocolName + "|" + candidate.slug, candidate])
   );
 
   for (const candidate of candidates) {
-    const key = candidate.protocolName + "|" + candidate.address;
-    const result = analyzedMap.get(key);
+    const result = processed.get(candidate.protocolName + "|" + candidate.slug);
     if (result) Object.assign(candidate, result);
-    if (!candidate.address && !candidate.aiSkippedReason) {
-      candidate.aiSkippedReason =
-        "DeFiLlama did not provide a usable BSC contract address.";
-    }
   }
 
   const aiCandidates = candidates
@@ -397,6 +448,8 @@ export async function runBscScan(options: {
         source: contract.sourceCode,
         heuristicFindings: contract.heuristics,
         context: {
+          chain: config.chainName,
+          chainId: config.chainId,
           protocolName: candidate.protocolName,
           protocolSlug: candidate.slug,
           category: candidate.category,
