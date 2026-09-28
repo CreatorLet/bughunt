@@ -17,6 +17,14 @@ export interface DefiLlamaProtocol {
   [key: string]: unknown;
 }
 
+export interface ContractAddressCandidate {
+  address: string;
+  source: "defillama" | "defillama-detail" | "github";
+  score: number;
+  evidence?: string;
+  file?: string;
+}
+
 export interface EtherscanSourceRecord {
   SourceCode?: string;
   ABI?: string;
@@ -81,7 +89,8 @@ export interface ScanCandidate {
   category?: string;
   tvl: number;
   address?: string;
-  addressSource?: "defillama";
+  addressSource?: ContractAddressCandidate["source"];
+  addressCandidates?: ContractAddressCandidate[];
   audits?: number | string;
   url?: string;
   contract?: ContractResearch;
