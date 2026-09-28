@@ -43,7 +43,7 @@ function printHelp(): void {
       "Scan defaults:",
       "  BSC TVL: $50,000–$1,000,000",
       "  Protocols: 20",
-      "  DeepSeek analyses: 5",
+      "  DeepSeek analyses: same as protocol count by default",
       "  Concurrent contract screens: 4",
       "",
       "Environment:",
@@ -154,7 +154,7 @@ async function scan(args: string[]): Promise<void> {
   );
   const aiLimit = Math.max(
     0,
-    Math.floor(numberFlag(args, "--ai-limit", 5))
+    Math.floor(numberFlag(args, "--ai-limit", limit))
   );
   const concurrency = Math.max(
     1,
