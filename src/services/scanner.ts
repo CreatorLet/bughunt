@@ -135,6 +135,63 @@ function aiText(analysis: DeepSeekAnalysis | undefined): string {
   );
 }
 
+function getAiFindings(
+  analysis: DeepSeekAnalysis | undefined
+): Record<string, unknown>[] {
+  const result = analysis?.result as Record<string, unknown> | null;
+
+  if (!Array.isArray(result?.findings)) return [];
+
+  return result.findings.filter(
+    (item): item is Record<string, unknown> =>
+      Boolean(item && typeof item === "object")
+  );
+}
+
+function formatFinding(
+  finding: Record<string, unknown>,
+  index: number
+): string[] {
+  const lines = [
+    `### Finding ${index + 1}: ${String(finding.title ?? "Untitled")}`,
+    `- Severity: ${String(finding.severity ?? "unknown")}`,
+    `- Confidence: ${String(finding.confidence ?? "unknown")}`,
+    `- Category: ${String(finding.category ?? "unknown")}`
+  ];
+
+  const functions = finding.affected_functions;
+  if (Array.isArray(functions) && functions.length) {
+    lines.push("- Affected functions: " + functions.map(String).join(", "));
+  }
+
+  const fields: Array<[string, string]> = [
+    ["Root cause", "root_cause"],
+    ["Evidence", "evidence"],
+    ["Attacker capabilities", "attacker_capabilities"],
+    ["Prerequisites", "prerequisites"],
+    ["Exploit path", "exploit_path"],
+    ["Invariant / assumption", "violated_invariant_or_assumption"],
+    ["Impact", "impact"],
+    ["Exploitability", "exploitability_assessment"],
+    ["Recommended fix", "recommended_fix"]
+  ];
+
+  for (const [label, key] of fields) {
+    const value = finding[key];
+    if (value === undefined || value === null) continue;
+
+    lines.push(
+      "- " +
+        label +
+        ": " +
+        (typeof value === "string" ? value : JSON.stringify(value))
+    );
+  }
+
+  lines.push("");
+  return lines;
+}
+
 async function writeReport(
   candidates: ScanCandidate[],
   options: {
@@ -214,6 +271,18 @@ async function writeReport(
       lines.push(
         `   - ${aiText(candidate.contract.aiAnalysis)}`
       );
+
+      const aiFindings = getAiFindings(candidate.contract.aiAnalysis);
+      if (aiFindings.length) {
+        lines.push("");
+        lines.push("   ## DeepSeek findings");
+        lines.push("");
+        aiFindings.forEach((finding, findingIndex) => {
+          for (const line of formatFinding(finding, findingIndex)) {
+            lines.push("   " + line);
+          }
+        });
+      }
 
       if (candidate.contract.goPlusError) {
         lines.push(`   - GoPlus: ${candidate.contract.goPlusError}`);
@@ -328,6 +397,11 @@ export async function runBscScan(options: {
         source: contract.sourceCode,
         heuristicFindings: contract.heuristics,
         context: {
+          protocolName: candidate.protocolName,
+          protocolSlug: candidate.slug,
+          category: candidate.category,
+          tvl: candidate.tvl,
+          auditsReportedByDefiLlama: candidate.audits,
           functionSurfaces: contract.functionSurfaces ?? [],
           surfaceScore: contract.surfaceScore,
           goPlus: contract.goPlus
