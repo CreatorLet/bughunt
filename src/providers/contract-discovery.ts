@@ -50,7 +50,7 @@ function extractRepo(value?: string): { owner: string; repo: string } | undefine
   if (!normalized) return undefined;
 
   const match = normalized.match(/github\.com\/([^/]+)\/([^/]+)/i);
-  if (!match) return undefined;
+  if (!match?.[1] || !match[2]) return undefined;
 
   return { owner: match[1], repo: match[2] };
 }
