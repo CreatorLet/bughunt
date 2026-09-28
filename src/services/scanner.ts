@@ -389,11 +389,17 @@ export async function runBscScan(options: {
           return bScore - aScore;
         });
 
-        candidate.contract = valid[0];
-        candidate.address = candidate.contract.address;
+        const selectedContract = valid[0];
+        if (!selectedContract) {
+          candidate.aiSkippedReason = "No valid researched contract remained after screening.";
+          return candidate;
+        }
+
+        candidate.contract = selectedContract;
+        candidate.address = selectedContract.address;
 
         const selected = candidate.addressCandidates.find(
-          (item) => item.address.toLowerCase() === candidate.address?.toLowerCase()
+          (item) => item.address.toLowerCase() === selectedContract.address.toLowerCase()
         );
         if (selected) {
           candidate.addressSource = selected.source;
