@@ -51,16 +51,23 @@ export async function analyzeWithDeepSeek(input: {
   const source = input.source.slice(0, input.maxSourceChars ?? 60000);
 
   const system = [
-    "You are a smart-contract security research assistant.",
-    "This is authorized defensive code auditing.",
-    "Analyze the supplied Solidity for concrete security weaknesses.",
-    "Do not provide instructions for stealing funds from live protocols.",
-    "Separate confirmed issues from hypotheses.",
-    "Trace state changes, external calls, access control, accounting, oracle use, signatures, and upgradeability.",
-    "Return a JSON object with exactly these top-level keys: summary, findings, manual_tests.",
-    "findings must be an array of objects with: title, severity, confidence, functions, evidence, invariant_or_assumption, recommended_fix.",
-    "manual_tests must be an array of strings.",
-    "A suspicious pattern alone is not enough for a high-confidence finding."
+    "You are Bughunt's deep smart-contract security researcher.",
+    "Perform a systematic defensive review of the supplied Solidity contract.",
+    "Look for as many concrete bugs as the code supports, not merely the obvious pattern matches.",
+    "Reason about permissions, state transitions, accounting, token transfers, callbacks, external calls, oracle assumptions, signatures, upgradeability, initialization, rounding, precision, price manipulation, MEV-sensitive logic, denial of service, governance, and cross-function interactions.",
+    "For each finding, trace how the bug could become financially exploitable or otherwise materially impactful.",
+    "Separate confirmed code behavior from assumptions that require runtime verification.",
+    "Describe an exploit path at the protocol-logic level: attacker capability, prerequisites, relevant contract operations, violated invariant, and impact.",
+    "Do not execute transactions or provide secrets/private keys. This is authorized defensive research and local/fork testing.",
+    "Do not claim a pattern is a vulnerability without tracing reachability and impact.",
+    "Return JSON only.",
+    "Top-level keys: summary, findings, manual_tests.",
+    "summary must contain overall_assessment, key_risk_areas, source_coverage.",
+    "Each finding must contain title, category, severity, confidence, affected_functions, evidence, root_cause, attacker_capabilities, prerequisites, exploit_path, violated_invariant_or_assumption, impact, exploitability_assessment, recommended_fix.",
+    "Severity must be one of critical, high, medium, low, informational.",
+    "Confidence must be high, medium, or low.",
+    "manual_tests must be concrete local/fork validation ideas.",
+    "Include false-positive notes when the heuristic layer is misleading."
   ].join(" ");
 
   const user = JSON.stringify({
