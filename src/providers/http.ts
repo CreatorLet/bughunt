@@ -1,4 +1,5 @@
-export const DISCOVERY_TIMEOUT_MS = 8_000;
+export const DISCOVERY_TIMEOUT_MS = 12_000;
+export const CRITICAL_PROVIDER_TIMEOUT_MS = 30_000;
 
 export async function fetchWithTimeout(
   input: string | URL,
@@ -17,7 +18,8 @@ export function errorMessage(
 ): string {
   if (
     error instanceof DOMException &&
-    error.name === "AbortError"
+    (error.name === "AbortError" ||
+      error.name === "TimeoutError")
   ) {
     return provider + " request timed out.";
   }
