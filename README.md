@@ -7,7 +7,9 @@ It combines:
 - **DeFiLlama** for protocol discovery and BSC TVL filtering
 - **Etherscan V2** for verified Solidity source and ABI
 - **GoPlus** for token/security signals
-- **DexScanner** for DEX market context such as liquidity, volume, pair age, and buy/sell activity
+- **DexScanner** for DEX market context and ranked BSC pair feeds
+- **DEX Screener** for documented name/symbol search and exact token-to-pair lookup
+- **BscScan public search** as a best-effort web-search fallback when contract names are not exposed elsewhere
 - Local heuristics and function-surface detection for fast pre-screening
 - A deterministic **0–100 severity score** for ranking candidates before paid AI analysis
 - **DeepSeek V4.1-Flash** for focused second-stage code review
@@ -24,7 +26,16 @@ BSC protocols inside TVL range
 Contract address discovery
    |
    +--> DeFiLlama metadata/detail
+   +--> DEX Screener name/symbol search
+   +--> DexScanner ranked-feed name matching
+   +--> BscScan public search fallback
    +--> protocol GitHub fallback
+   |
+   +--> corroborate independent sources
+   +--> classify role: core / implementation / token / pair
+   |
+   v
+Research multiple credible address candidates
    |
    v
 Etherscan + GoPlus
@@ -96,13 +107,23 @@ Default behavior:
 
 The configured default source budget is `45,000` characters. This can be changed with `AI_SOURCE_CHARS`.
 
-DeepSeek's current API documentation lists `deepseek-flash` as DeepSeek-V4.1-Flash, with a 1M-token context and substantially lower input/output pricing than the V4-Pro tier. Bughunt therefore keeps `deepseek-flash` for the paid review stage.
+DeepSeek currently documents `deepseek-flash` as DeepSeek-V4.1-Flash with a 1M-token context window. Its published pricing is substantially lower than the V4-Pro tier, so Bughunt keeps `deepseek-flash` for the paid review stage. citeturn751793search3turn751793search2
 
-## DexScanner integration
+## Address discovery
 
-DexScanner's public read API exposes feed endpoints for `trending`, `top`, `gainers`, and `new` pairs, and the public feed does not require an API key. Bughunt uses cached `top` + `trending` BSC feeds and matches candidate addresses against base/quote token addresses. Absence from those feeds is **not** treated as proof that a token has no liquidity.
+Address discovery is now a multi-source resolver rather than a single DeFiLlama lookup.
 
-Market information is used as **context and triage evidence**, not as proof of a contract vulnerability.
+1. DeFiLlama metadata and protocol detail are checked first.
+2. DEX Screener searches by protocol name, symbol, and slug. Its official API documents pair search and token-to-pair lookup. citeturn543745search0turn543745search4
+3. DexScanner is queried through its public ranked BSC feeds. Its current documentation describes `trending`, `top`, `gainers`, and `new` feed types rather than an arbitrary name/address lookup endpoint, so Bughunt uses name matching against those feeds instead of pretending DexScanner has a documented direct search endpoint. citeturn543745search1turn543745search3
+4. BscScan public web search is used as a best-effort fallback. BscScan's documented contract API is address-based and does not provide a documented protocol-name search endpoint, so this fallback is intentionally non-authoritative. citeturn736777search0
+5. If the protocol publishes a GitHub repository, Bughunt scans deployment/configuration/source files for BSC addresses.
+
+The resolver keeps multiple candidates, classifies likely roles, researches several candidates, and boosts addresses corroborated by multiple independent sources. This is important because a protocol name search can find a token while the real bounty-relevant surface may be a router, vault, implementation, staking contract, or other core contract.
+
+## Dex market enrichment
+
+After an address is selected, Bughunt uses DexScanner market context first and DEX Screener's exact token lookup as a fallback. Market information is **context and triage evidence**, not proof of a contract vulnerability.
 
 ## Commands
 
@@ -166,6 +187,8 @@ ETHERSCAN_API_KEY=...
 GOPLUS_APP_KEY=...
 GOPLUS_APP_SECRET=...
 DEXSCANNER_ENABLED=true
+DEXSCREENER_ENABLED=true
+BSCSCAN_SEARCH_ENABLED=true
 ```
 
 Then verify:
@@ -184,7 +207,7 @@ reports/
   scan-<timestamp>.md
 ```
 
-Reports include protocol metadata, discovered addresses, deterministic severity scores and factors, DEX market context when a matching pair is indexed, selected GoPlus fields, and DeepSeek findings.
+Reports include protocol metadata, all retained address candidates, discovery source/role/score, source corroboration, deterministic severity scores and factors, DEX market context when available, selected GoPlus fields, and DeepSeek findings.
 
 Raw Solidity source is not copied into the report.
 
@@ -198,4 +221,4 @@ The severity score is a prioritization aid, not a formal audit result. DeepSeek 
 
 ## Next logical upgrades
 
-The next useful research layer is automatic discovery of multiple protocol roles—routers, vaults, pools, implementations, staking contracts, governance/timelocks, and related tokens—then analyzing the relationships between them instead of treating every protocol as a single contract.
+The scanner already discovers and ranks several protocol roles. The next major research layer is relationship-aware analysis: linking routers to factories, proxies to implementations, vaults to underlying assets, pools to oracles, and staking/governance contracts to the contracts they control.
