@@ -41,7 +41,14 @@ function getRolePriority(role: ContractAddressRole): number {
 }
 
 function rankingScore(item: ContractAddressCandidate): number {
-  return item.score + getRolePriority(item.role);
+  const corroborationBonus =
+    Math.min(3, item.sources?.length ?? 1) * 8;
+
+  return (
+    item.score +
+    getRolePriority(item.role) +
+    corroborationBonus
+  );
 }
 
 async function getJson<T>(url: string): Promise<T> {
@@ -108,12 +115,35 @@ function uniqueAddresses(
     const key = item.address.toLowerCase();
     const existing = byAddress.get(key);
 
-    if (
-      !existing ||
-      rankingScore(item) > rankingScore(existing)
-    ) {
-      byAddress.set(key, item);
+    if (!existing) {
+      byAddress.set(key, {
+        ...item,
+        sources: [...new Set(item.sources ?? [item.source])]
+      });
+      continue;
     }
+
+    const mergedSources = [
+      ...new Set([
+        ...(existing.sources ?? [existing.source]),
+        ...(item.sources ?? [item.source])
+      ])
+    ];
+
+    const preferred =
+      rankingScore(item) > rankingScore(existing)
+        ? item
+        : existing;
+
+    byAddress.set(key, {
+      ...preferred,
+      sources: mergedSources,
+      score: Math.min(
+        100,
+        Math.max(existing.score, item.score) +
+          Math.min(3, mergedSources.length - 1) * 8
+      )
+    });
   }
 
   return [...byAddress.values()].sort(
