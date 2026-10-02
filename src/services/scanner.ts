@@ -403,7 +403,9 @@ async function writeReport(
 
       if (candidate.contract.market?.warnings?.length) {
         lines.push(
-          "   - DexScanner warnings: " +
+          "   - " +
+            candidate.contract.market.provider +
+            " warnings: " +
             candidate.contract.market.warnings.join("; ")
         );
       }
@@ -599,15 +601,15 @@ export async function runBscScan(
           candidate
         );
 
-        const selected =
+        const selectedAddress =
           candidate.addressCandidates.find(
             (item) =>
               item.address.toLowerCase() ===
               selectedContract.address.toLowerCase()
           );
 
-        if (selected) {
-          candidate.addressSource = selected.source;
+        if (selectedAddress) {
+          candidate.addressSource = selectedAddress.source;
         }
       } catch (error) {
         candidate.aiSkippedReason =
