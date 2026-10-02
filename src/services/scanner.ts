@@ -639,7 +639,7 @@ export async function runBscScan(
           `[Discovery] ${candidate.protocolName} — discovery error: ${error instanceof Error ? error.message : String(error)}`
         );
         candidate.aiSkippedReason =
-          "contract discovery failed: "
+          "contract discovery failed: " +
           (error instanceof Error
             ? error.message
             : String(error));
