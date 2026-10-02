@@ -86,6 +86,7 @@ function compactContract(
     address: report.address,
     contractName: report.contractName,
     sourceVerified: report.sourceVerified,
+    sourceQuality: report.sourceQuality ?? "unavailable",
     severity: report.severity ?? null,
     heuristicScore: report.heuristicScore,
     surfaceScore: report.surfaceScore,
