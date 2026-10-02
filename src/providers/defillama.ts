@@ -1,30 +1,52 @@
-import { fetchWithTimeout } from "./http.js";
+import { CRITICAL_PROVIDER_TIMEOUT_MS, fetchWithTimeout, errorMessage } from "./http.js";
 import type { DefiLlamaProtocol } from "../types.js";
 
 const BASE_URL = "https://api.llama.fi";
 
 async function getJson<T>(url: string): Promise<T> {
-  const response = await fetchWithTimeout(url, { headers: { accept: "application/json" } });
-  if (!response.ok) {
-    throw new Error("DeFiLlama request failed: HTTP " + response.status);
+  try {
+    const response = await fetchWithTimeout(
+      url,
+      { headers: { accept: "application/json" } },
+      CRITICAL_PROVIDER_TIMEOUT_MS
+    );
+
+    if (!response.ok) {
+      throw new Error(
+        "DeFiLlama request failed: HTTP " + response.status
+      );
+    }
+
+    return response.json() as Promise<T>;
+  } catch (error) {
+    throw new Error(
+      errorMessage(error, "DeFiLlama")
+    );
   }
-  return response.json() as Promise<T>;
 }
 
-function getBscTvlFromProtocolListItem(protocol: DefiLlamaProtocol): number | null {
+function getBscTvlFromProtocolListItem(
+  protocol: DefiLlamaProtocol
+): number | null {
   const chainTvls = protocol.chainTvls;
   if (!chainTvls) return null;
 
   // DeFiLlama labels BNB Smart Chain as "Binance" in protocol TVL data.
   const key = Object.keys(chainTvls).find((name) => {
     const normalized = name.trim().toLowerCase();
-    return normalized === "binance" || normalized === "bsc" || normalized === "bnb smart chain";
+    return (
+      normalized === "binance" ||
+      normalized === "bsc" ||
+      normalized === "bnb smart chain"
+    );
   });
 
   if (!key) return null;
 
   const value = chainTvls[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : null;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : null;
 }
 
 export async function listBscProtocols(
@@ -32,22 +54,36 @@ export async function listBscProtocols(
   maxTvl: number,
   limit: number
 ): Promise<DefiLlamaProtocol[]> {
-  const protocols = await getJson<DefiLlamaProtocol[]>(BASE_URL + "/protocols");
+  const protocols = await getJson<DefiLlamaProtocol[]>(
+    BASE_URL + "/protocols"
+  );
 
   const candidates: DefiLlamaProtocol[] = [];
 
   for (const protocol of protocols) {
-    const hasBscChain = (protocol.chains ?? []).some((chain) => {
-      const normalized = chain.trim().toLowerCase();
-      return normalized === "binance" || normalized === "bsc" || normalized === "bnb smart chain";
-    });
+    const hasBscChain = (protocol.chains ?? []).some(
+      (chain) => {
+        const normalized = chain.trim().toLowerCase();
+        return (
+          normalized === "binance" ||
+          normalized === "bsc" ||
+          normalized === "bnb smart chain"
+        );
+      }
+    );
 
     if (!hasBscChain) {
       continue;
     }
 
-    const bscTvl = getBscTvlFromProtocolListItem(protocol);
-    if (bscTvl === null || bscTvl < minTvl || bscTvl > maxTvl) {
+    const bscTvl = getBscTvlFromProtocolListItem(
+      protocol
+    );
+    if (
+      bscTvl === null ||
+      bscTvl < minTvl ||
+      bscTvl > maxTvl
+    ) {
       continue;
     }
 
@@ -58,14 +94,21 @@ export async function listBscProtocols(
   }
 
   return candidates
-    .sort((a, b) => Number(b.tvl ?? 0) - Number(a.tvl ?? 0))
+    .sort(
+      (a, b) =>
+        Number(b.tvl ?? 0) - Number(a.tvl ?? 0)
+    )
     .slice(0, limit);
 }
 
 export async function getProtocol(
   slug: string
 ): Promise<DefiLlamaProtocol & Record<string, unknown>> {
-  return getJson<DefiLlamaProtocol & Record<string, unknown>>(
-    BASE_URL + "/protocol/" + encodeURIComponent(slug)
+  return getJson<
+    DefiLlamaProtocol & Record<string, unknown>
+  >(
+    BASE_URL +
+      "/protocol/" +
+      encodeURIComponent(slug)
   );
 }
