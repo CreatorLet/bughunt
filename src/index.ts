@@ -1,4 +1,5 @@
 import { config } from "./config.js";
+import { discoverBscContractAddresses } from "./providers/contract-discovery.js";
 import { getProtocol, listBscProtocols } from "./providers/defillama.js";
 import { researchContract, summarizeContract } from "./services/research.js";
 import { runBscScan } from "./services/scanner.js";
@@ -108,19 +109,63 @@ async function discover(args: string[]): Promise<void> {
     return;
   }
 
-  protocols.forEach((p, i) => {
-    console.log(
-      [
-        `${i + 1}. ${p.name ?? p.slug ?? "Unknown"}`,
-        "   TVL: $" + Number(p.tvl ?? 0).toLocaleString(),
-        "   Category: " + (p.category ?? "Unknown"),
-        "   Slug: " + (p.slug ?? "n/a"),
-        "   Address: " + (p.address ?? "not supplied"),
-        "   Audits: " + (p.audits ?? "unknown"),
-        "   URL: " + (p.url ?? "n/a"),
-        ""
-      ].join("\n")
-    );
+  const discovered = await Promise.all(
+    protocols.map(async (p) => ({
+      protocol: p,
+      addresses: await discoverBscContractAddresses(p, 8)
+    }))
+  );
+
+  discovered.forEach(({ protocol: p, addresses }, i) => {
+    const lines = [
+      `${i + 1}. ${p.name ?? p.slug ?? "Unknown"}`,
+      "   TVL: $" +
+        Number(p.tvl ?? 0).toLocaleString(),
+      "   Category: " + (p.category ?? "Unknown"),
+      "   Slug: " + (p.slug ?? "n/a"),
+      "   DeFiLlama address: " +
+        (p.address ?? "not supplied"),
+      "   Audits: " + (p.audits ?? "unknown"),
+      "   URL: " + (p.url ?? "n/a"),
+      "   Resolved BSC addresses: " + addresses.length
+    ];
+
+    if (!addresses.length) {
+      lines.push(
+        "   Discovery: no address found across DeFiLlama, DEX Screener, DexScanner, BscScan, and GitHub."
+      );
+    } else {
+      addresses.slice(0, 8).forEach((item, index) => {
+        lines.push(
+          "   " +
+            (index + 1) +
+            ". " +
+            item.address +
+            " [" +
+            item.role +
+            "/" +
+            item.source +
+            ", score " +
+            item.score +
+            "]" +
+            (item.matchedName
+              ? " " + item.matchedName
+              : "")
+        );
+
+        if (item.evidence) {
+          lines.push(
+            "      Evidence: " +
+              item.evidence
+                .replace(/\s+/g, " ")
+                .slice(0, 220)
+          );
+        }
+      });
+    }
+
+    lines.push("");
+    console.log(lines.join("\n"));
   });
 }
 
