@@ -17,12 +17,30 @@ export interface DefiLlamaProtocol {
   [key: string]: unknown;
 }
 
+export type ContractAddressSource =
+  | "defillama"
+  | "defillama-detail"
+  | "github"
+  | "dexscreener"
+  | "dexscanner"
+  | "bscscan";
+
+export type ContractAddressRole =
+  | "core"
+  | "implementation"
+  | "token"
+  | "pair"
+  | "related"
+  | "unknown";
+
 export interface ContractAddressCandidate {
   address: string;
-  source: "defillama" | "defillama-detail" | "github";
+  source: ContractAddressSource;
+  role: ContractAddressRole;
   score: number;
   evidence?: string;
   file?: string;
+  matchedName?: string;
 }
 
 export interface DexScannerPair {
@@ -165,7 +183,7 @@ export interface ScanCandidate {
   category?: string;
   tvl: number;
   address?: string;
-  addressSource?: ContractAddressCandidate["source"];
+  addressSource?: ContractAddressSource;
   addressCandidates?: ContractAddressCandidate[];
   audits?: number | string;
   url?: string;
