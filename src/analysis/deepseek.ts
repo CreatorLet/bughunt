@@ -3,8 +3,8 @@ import type { DeepSeekAnalysis, DeepSeekUsage } from "../types.js";
 
 const BASE_URL = "https://api.deepseek.com";
 const MODEL = "deepseek-flash";
-const MAX_SOURCE_CHARS = 100000;
-const MAX_OUTPUT_TOKENS = 12000;
+const DEFAULT_MAX_SOURCE_CHARS = 45000;
+const MAX_OUTPUT_TOKENS = 6500;
 
 interface DeepSeekResponse {
   id?: string;
@@ -47,40 +47,117 @@ function parseJson(text: string): Record<string, unknown> {
 function buildSystemPrompt(compactRetry: boolean): string {
   const mode = compactRetry
     ? [
-        "This is a compact retry because a previous response was truncated.",
-        "Keep every field concise.",
-        "Return at most 8 findings and at most 3 manual_tests.",
-        "Do not repeat the source code in evidence.",
-        "Use one or two sentences per finding field."
+        "This is a compact retry because the previous JSON was truncated.",
+        "Return at most 4 findings and 2 manual_tests.",
+        "Keep every field to one or two short sentences.",
+        "Do not quote or repeat source code."
       ]
     : [
-        "Perform a systematic and comprehensive defensive review.",
-        "Look for as many concrete bugs as the supplied code supports."
+        "Perform a focused but deep defensive review.",
+        "Prioritize concrete, externally reachable bugs supported by the supplied evidence."
       ];
 
   return [
-    "You are Bughunt's deep smart-contract security researcher.",
-    "Target chain: BSC (chainId 56). All runtime assumptions and manual tests must be BSC-specific.",
-    "Review only the supplied contract/source and the supplied runtime context.",
+    "You are Bughunt's smart-contract security researcher.",
+    "Target chain: BSC (chainId 56).",
+    "Review only the supplied source excerpt and runtime context.",
+    "The source may be a focused excerpt rather than the complete contract; do not infer omitted code as fact.",
     ...mode,
-    "Reason about permissions, state transitions, accounting, token transfers, callbacks, external calls, oracle assumptions, signatures, upgradeability, initialization, rounding, precision, price manipulation, MEV-sensitive logic, denial of service, governance, and cross-function interactions.",
-    "For each finding, trace how the issue could become financially exploitable or otherwise materially impactful.",
-    "Separate confirmed code behavior from assumptions that require runtime verification.",
-    "Do not call something a vulnerability merely because a privileged role can cause harm when compromised or because a standard ERC20 behavior is known. Classify those separately.",
-    "Each finding must include finding_type: vulnerability, privileged-risk, deployment-risk, known-standard, informational, or false-positive.",
-    "For direct vulnerabilities, explain an attacker path that does not assume the attacker already controls a privileged account unless the privilege itself is improperly obtainable.",
-    "For privileged-risk or deployment-risk findings, explicitly state why they are not unprivileged contract exploits.",
-    "Describe exploit paths at protocol-logic level only: attacker capability, prerequisites, relevant contract operations, violated invariant, and impact.",
-    "Do not execute transactions or provide secrets/private keys. Manual tests must be local/fork-only and must not instruct the user to send transactions to a live RPC.",
+    "Reason about authorization, state transitions, accounting, token transfers, callbacks, external calls, oracle assumptions, signatures, upgradeability, initialization, rounding, precision, price manipulation, MEV-sensitive logic, denial of service, governance, and cross-function interactions.",
+    "For every direct vulnerability, identify an attacker path that does not assume control of an already-privileged account.",
+    "Separate confirmed code behavior from assumptions requiring runtime or fork validation.",
+    "Do not report a privileged capability as an unprivileged exploit. Classify it as privileged-risk when appropriate.",
+    "Do not execute transactions or provide secrets/private keys. Manual tests must be local/fork-only.",
     "Return JSON only.",
     "Top-level keys: summary, findings, manual_tests.",
-    "summary must contain overall_assessment, key_risk_areas, source_coverage.",
-    "Each finding must contain title, finding_type, category, severity, confidence, affected_functions, evidence, root_cause, attacker_capabilities, prerequisites, exploit_path, violated_invariant_or_assumption, impact, exploitability_assessment, recommended_fix.",
-    "Severity must be one of critical, high, medium, low, informational.",
-    "Confidence must be high, medium, or low.",
-    "manual_tests must be concrete local/fork validation ideas and must use BSC chainId 56.",
-    "Include false-positive notes when the heuristic layer is misleading."
+    "summary keys: overall_assessment, key_risk_areas, source_coverage.",
+    "Each finding keys: title, finding_type, category, severity, confidence, affected_functions, evidence, root_cause, attacker_capabilities, prerequisites, exploit_path, violated_invariant_or_assumption, impact, exploitability_assessment, recommended_fix.",
+    "finding_type must be vulnerability, privileged-risk, deployment-risk, known-standard, informational, or false-positive.",
+    "severity must be critical, high, medium, low, or informational.",
+    "confidence must be high, medium, or low.",
+    "manual_tests must describe safe local/fork validation ideas only.",
+    "Do not invent market statistics; use only the supplied market fields.",
+    "Include false-positive notes when a heuristic can be misleading."
   ].join(" ");
+}
+
+function stripComments(source: string): string {
+  return source
+    .replace(/\/\/[^\n\r]*/g, "")
+    .replace(/\/\*[\s\S]*?\*\//g, "");
+}
+
+function buildFocusedSource(
+  source: string,
+  context: Record<string, unknown> | undefined,
+  maxChars: number
+): { source: string; coverage: string } {
+  const cleaned = stripComments(source);
+
+  if (cleaned.length <= maxChars) {
+    return {
+      source: cleaned,
+      coverage: "complete source within configured character limit"
+    };
+  }
+
+  const surfaceNames = Array.isArray(context?.functionSurfaces)
+    ? context.functionSurfaces
+        .filter(
+          (item): item is Record<string, unknown> =>
+            Boolean(item && typeof item === "object")
+        )
+        .map((item) => item.name)
+        .filter((name): name is string => typeof name === "string")
+    : [];
+
+  const lines = cleaned.split(/\r?\n/);
+  const selected = new Set<number>();
+
+  // Keep the beginning because it usually contains imports, interfaces,
+  // libraries, structs, state variables, events, modifiers, and headers.
+  let baseChars = 0;
+  for (
+    let i = 0;
+    i < lines.length && baseChars < Math.min(12000, maxChars);
+    i++
+  ) {
+    selected.add(i);
+    baseChars += lines[i].length + 1;
+  }
+
+  for (const name of surfaceNames.slice(0, 8)) {
+    const safeName = name.replace(/[^A-Za-z0-9_]/g, "\\$&");
+    const matcher = new RegExp("\\bfunction\\s+" + safeName + "\\b");
+    const index = lines.findIndex((line) => matcher.test(line));
+
+    if (index < 0) continue;
+
+    for (
+      let i = Math.max(0, index - 2);
+      i <= Math.min(lines.length - 1, index + 70);
+      i++
+    ) {
+      selected.add(i);
+    }
+  }
+
+  const ordered = [...selected].sort((a, b) => a - b);
+  const chunks: string[] = [];
+  let size = 0;
+
+  for (const index of ordered) {
+    const line = lines[index] ?? "";
+    if (size + line.length + 1 > maxChars) break;
+    chunks.push(line);
+    size += line.length + 1;
+  }
+
+  return {
+    source: chunks.join("\n"),
+    coverage:
+      "focused excerpt: contract header/state declarations plus selected public/interesting functions; omitted functions were not reviewed directly"
+  };
 }
 
 async function requestAnalysis(
@@ -141,14 +218,11 @@ async function requestAnalysis(
   const content = choice?.message?.content;
 
   if (!content || !content.trim()) {
-    const reasoningLength = choice?.message?.reasoning_content?.length ?? 0;
     throw new Error(
       "DeepSeek returned no final analysis content. finish_reason=" +
         (choice?.finish_reason ?? "unknown") +
         ", reasoning_chars=" +
-        reasoningLength +
-        ", raw_response=" +
-        body.slice(0, 1500)
+        (choice?.message?.reasoning_content?.length ?? 0)
     );
   }
 
@@ -169,7 +243,20 @@ export async function analyzeWithDeepSeek(input: {
   context?: Record<string, unknown>;
 }): Promise<DeepSeekAnalysis> {
   const apiKey = requireDeepSeek();
-  const source = input.source.slice(0, input.maxSourceChars ?? MAX_SOURCE_CHARS);
+  const maxSourceChars =
+    input.maxSourceChars ?? DEFAULT_MAX_SOURCE_CHARS;
+
+  const focused = buildFocusedSource(
+    input.source,
+    input.context,
+    maxSourceChars
+  );
+
+  const context = {
+    ...(input.context ?? {}),
+    sourceCoverage: focused.coverage,
+    sourceCharactersSent: focused.source.length
+  };
 
   const user = JSON.stringify({
     chain: "BSC",
@@ -177,8 +264,8 @@ export async function analyzeWithDeepSeek(input: {
     address: input.address,
     contractName: input.contractName ?? null,
     heuristicFindings: input.heuristicFindings,
-    context: input.context ?? {},
-    source
+    context,
+    source: focused.source
   });
 
   try {
@@ -192,11 +279,15 @@ export async function analyzeWithDeepSeek(input: {
       };
     }
   } catch (error) {
-    if (!(error instanceof Error) || !error.message.includes("incomplete or invalid JSON")) {
+    if (
+      !(error instanceof Error) ||
+      !error.message.includes("incomplete or invalid JSON")
+    ) {
       throw error;
     }
   }
 
+  // Retry only when malformed/truncated JSON makes the result unusable.
   const retry = await requestAnalysis(apiKey, user, true);
 
   return {
