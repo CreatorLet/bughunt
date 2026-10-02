@@ -215,6 +215,7 @@ export interface ContractResearch {
   chainId: string;
   address: string;
   sourceVerified: boolean;
+  sourceQuality?: "full" | "standard-json" | "empty" | "unavailable";
   contractName?: string;
   sourceCode?: string;
   abi?: unknown;
