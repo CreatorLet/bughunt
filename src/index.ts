@@ -87,6 +87,10 @@ async function discover(args: string[]): Promise<void> {
     )
   );
 
+  console.log(
+    "[DeFiLlama] Loading BSC protocol list..."
+  );
+
   const protocols = await listBscProtocols(
     minTvl,
     maxTvl,
@@ -313,6 +317,10 @@ async function scan(args: string[]): Promise<void> {
     `BSC protocols: ${limit} | TVL: $${minTvl.toLocaleString()}–$${maxTvl.toLocaleString()} | AI: top ${aiLimit} above severity ${aiMinSeverityScore}`
   );
   console.log("");
+
+  console.log(
+    "[DeFiLlama] Loading BSC protocol list..."
+  );
 
   const result = await runBscScan({
     minTvl,
