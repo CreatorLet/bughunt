@@ -183,7 +183,7 @@ function rawProtocolAddresses(
   protocol: DefiLlamaProtocol
 ): ContractAddressCandidate[] {
   const value = protocol.address;
-  if (!value) return [];
+  if (typeof value !== "string" || !value.trim()) return [];
 
   const found: ContractAddressCandidate[] = [];
 
