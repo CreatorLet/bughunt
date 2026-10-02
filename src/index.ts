@@ -59,6 +59,8 @@ function printHelp(): void {
       "  GOPLUS_APP_SECRET",
       "  DEXSCANNER_ENABLED (optional, default true)",
       "  DEXSCANNER_BASE_URL (optional)",
+      "  DEXSCREENER_ENABLED (optional, default true)",
+      "  BSCSCAN_SEARCH_ENABLED (optional, default true)",
       "  DEFAULT_AI_LIMIT (optional, default 3)",
       "  AI_MIN_SEVERITY_SCORE (optional, default 30)",
       "  AI_SOURCE_CHARS (optional, default 45000)",
@@ -344,7 +346,7 @@ async function scan(args: string[]): Promise<void> {
           `   Address: ${candidate.address ?? "not discovered"}`,
           `   Severity: ${candidate.severityScore ?? 0}/100 (${candidate.severityLevel ?? "informational"})`,
           `   Screen score: ${candidate.screenScore}${candidate.aiSelected ? " | AI analyzed" : ""}`,
-          `   DEX market: ${candidate.market?.matched ? "matched" : "not matched"}`,
+          `   DEX market: ${candidate.market?.matched ? "matched via " + candidate.market.provider : "not matched"}`,
           `   Surfaces: ${surfaceNames.length ? surfaceNames.join(", ") : "none"}`,
           candidate.aiSkippedReason
             ? `   Note: ${candidate.aiSkippedReason}`
