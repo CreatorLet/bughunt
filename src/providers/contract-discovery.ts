@@ -398,7 +398,7 @@ async function discoverFromWebsite(
 
       candidates.push({
         address: match[0],
-        source: "github",
+        source: "website",
         role: roleFromContext(context),
         score: Math.min(100, score),
         evidence:
