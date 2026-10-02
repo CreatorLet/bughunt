@@ -41,6 +41,7 @@ export interface ContractAddressCandidate {
   evidence?: string;
   file?: string;
   matchedName?: string;
+  sources?: ContractAddressSource[];
 }
 
 export interface DexScannerPair {
