@@ -36,9 +36,23 @@ function heuristicFactor(
   };
 
   const points = pointsBySeverity[finding.severity];
-  if (points > 0) {
-    addFactor(factors, "heuristic:" + finding.id, points, finding.severity, finding.title);
-  }
+
+  if (points <= 0) return;
+
+  const level: SeverityLevel =
+    finding.severity === "high"
+      ? "high"
+      : finding.severity === "medium"
+        ? "medium"
+        : "low";
+
+  addFactor(
+    factors,
+    "heuristic:" + finding.id,
+    points,
+    level,
+    finding.title
+  );
 }
 
 function addMarketFactors(
@@ -75,6 +89,7 @@ function addMarketFactors(
 
   if (liquidity > 0 && fdv > 0) {
     const fdvLiquidity = fdv / liquidity;
+
     if (fdvLiquidity >= 50) {
       addFactor(
         factors,
@@ -95,7 +110,11 @@ function addMarketFactors(
   }
 
   if (created > 0) {
-    const ageHours = Math.max(0, (Date.now() - created) / 3_600_000);
+    const ageHours = Math.max(
+      0,
+      (Date.now() - created) / 3_600_000
+    );
+
     if (ageHours < 24) {
       addFactor(
         factors,
@@ -136,7 +155,9 @@ function addMarketFactors(
   }
 }
 
-export function assessSeverity(report: ContractResearch): SeverityAssessment {
+export function assessSeverity(
+  report: ContractResearch
+): SeverityAssessment {
   const factors: SeverityAssessment["factors"] = [];
 
   for (const finding of report.heuristics) {
@@ -144,6 +165,7 @@ export function assessSeverity(report: ContractResearch): SeverityAssessment {
   }
 
   const surfaces = report.functionSurfaces ?? [];
+
   if (surfaces.some((s) => s.kind === "money-moving")) {
     addFactor(
       factors,
@@ -185,6 +207,7 @@ export function assessSeverity(report: ContractResearch): SeverityAssessment {
   }
 
   const token = report.goPlus;
+
   if (token?.is_honeypot === "1") {
     addFactor(
       factors,
@@ -239,7 +262,11 @@ export function assessSeverity(report: ContractResearch): SeverityAssessment {
 
   const score = Math.min(
     100,
-    factors.reduce((total, factor) => total + Math.max(0, factor.points), 0)
+    factors.reduce(
+      (total, factor) =>
+        total + Math.max(0, factor.points),
+      0
+    )
   );
 
   return {
