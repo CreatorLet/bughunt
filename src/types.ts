@@ -89,7 +89,7 @@ export interface DexScannerPair {
 }
 
 export interface MarketContext {
-  provider: "dexscanner";
+  provider: "dexscanner" | "dexscreener";
   matched: boolean;
   pairCount: number;
   pair?: DexScannerPair;
