@@ -33,7 +33,10 @@ function getBscTvlFromProtocolListItem(
 
   // DeFiLlama labels BNB Smart Chain as "Binance" in protocol TVL data.
   const key = Object.keys(chainTvls).find((name) => {
-    const normalized = name.trim().toLowerCase();
+    const normalized =
+      typeof name === "string"
+        ? name.trim().toLowerCase()
+        : "";
     return (
       normalized === "binance" ||
       normalized === "bsc" ||
@@ -63,6 +66,7 @@ export async function listBscProtocols(
   for (const protocol of protocols) {
     const hasBscChain = (protocol.chains ?? []).some(
       (chain) => {
+        if (typeof chain !== "string") return false;
         const normalized = chain.trim().toLowerCase();
         return (
           normalized === "binance" ||
