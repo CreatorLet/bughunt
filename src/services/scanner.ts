@@ -511,7 +511,7 @@ export async function runBscScan(
 
         if (!primary) {
           candidate.aiSkippedReason =
-            "No BSC contract address discovered from DeFiLlama metadata/detail or protocol GitHub.";
+            "No BSC contract address discovered after DeFiLlama detail, DEX Screener name search, DexScanner feeds, BscScan search, and GitHub fallback.";
           return candidate;
         }
 
