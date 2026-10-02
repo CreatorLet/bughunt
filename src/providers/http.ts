@@ -5,20 +5,10 @@ export async function fetchWithTimeout(
   init: RequestInit = {},
   timeoutMs = DISCOVERY_TIMEOUT_MS
 ): Promise<Response> {
-  const controller = new AbortController();
-  const timeout = setTimeout(
-    () => controller.abort(),
-    timeoutMs
-  );
-
-  try {
-    return await fetch(input, {
-      ...init,
-      signal: controller.signal
-    });
-  } finally {
-    clearTimeout(timeout);
-  }
+  return fetch(input, {
+    ...init,
+    signal: AbortSignal.timeout(timeoutMs)
+  });
 }
 
 export function errorMessage(
