@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { errorMessage, fetchWithTimeout } from "./http.js";
 import type {
   ContractAddressCandidate,
   DefiLlamaProtocol,
@@ -116,7 +117,7 @@ async function getFeed(options: FeedOptions = {}): Promise<DexScannerPair[]> {
   let response: Response;
 
   try {
-    response = await fetch(url, {
+    response = await fetchWithTimeout(url, {
       headers: {
         accept: "application/json",
         "user-agent": "bughunt-researcher"
