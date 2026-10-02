@@ -123,7 +123,7 @@ function buildFocusedSource(
     i++
   ) {
     selected.add(i);
-    baseChars += lines[i].length + 1;
+    baseChars += (lines[i]?.length ?? 0) + 1;
   }
 
   for (const name of surfaceNames.slice(0, 8)) {
