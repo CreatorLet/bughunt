@@ -200,7 +200,10 @@ function rawProtocolAddresses(
     found.push({
       address,
       source: "defillama",
-      role: roleFromContext(context),
+      role:
+        roleFromContext(context) === "related"
+          ? "core"
+          : roleFromContext(context),
       score: /\b(bsc|binance|bnb smart chain)\b/.test(lower)
         ? 100
         : 86,
@@ -217,43 +220,53 @@ function collectAddressStrings(
   out: ContractAddressCandidate[]
 ): void {
   if (typeof value === "string") {
-    for (const match of value.matchAll(ADDRESS_RE)) {
-      const offset = match.index ?? 0;
-      const context = value.slice(
-        Math.max(0, offset - 160),
-        Math.min(value.length, offset + 220)
+    const lowerPath = path.toLowerCase();
+    const tokenLikePath =
+      /(tokenbreakdowns?|coingecko|gecko_id|logo|prices?)/.test(
+        lowerPath
       );
-      const lowerPath = path.toLowerCase();
-      const lowerContext = context.toLowerCase();
 
-      const protocolLikePath =
-        /(address|contract|router|factory|vault|pool|gauge|masterchef|staking|implementation|treasury|governance|timelock|proxy)/.test(
-          lowerPath
+    if (!tokenLikePath) {
+      for (const match of value.matchAll(ADDRESS_RE)) {
+        const offset = match.index ?? 0;
+        const context = value.slice(
+          Math.max(0, offset - 180),
+          Math.min(value.length, offset + 260)
         );
+        const lowerContext = context.toLowerCase();
 
-      const tokenLikePath =
-        /(tokenbreakdowns?|coingecko|gecko_id|logo|prices?)/.test(
-          lowerPath
-        );
+        const protocolLikePath =
+          /(address|contract|router|factory|vault|pool|gauge|masterchef|staking|implementation|treasury|governance|timelock|proxy)/.test(
+            lowerPath
+          );
 
-      if (!protocolLikePath || tokenLikePath) continue;
+        const bscContext =
+          /\b(bsc|binance|bnb smart chain|chain.?id.{0,12}56)\b/.test(
+            lowerContext
+          );
 
-      let score = 62;
-      if (
-        /\b(bsc|binance|bnb smart chain)\b/.test(
-          lowerContext
-        )
-      ) {
-        score += 30;
+        const roleContext =
+          /(router|factory|vault|pool|gauge|masterchef|staking|bridge|treasury|governance|timelock|proxy|implementation)/.test(
+            lowerPath + " " + lowerContext
+          );
+
+        if (!protocolLikePath && !bscContext && !roleContext) {
+          continue;
+        }
+
+        let score = 52;
+        if (bscContext) score += 24;
+        if (protocolLikePath) score += 16;
+        if (roleContext) score += 10;
+
+        out.push({
+          address: match[0],
+          source: "defillama-detail",
+          role: roleFromContext(path + " " + context),
+          score: Math.min(100, score),
+          evidence: path + ": " + context
+        });
       }
-
-      out.push({
-        address: match[0],
-        source: "defillama-detail",
-        role: roleFromContext(path + " " + context),
-        score: Math.min(100, score),
-        evidence: path + ": " + context
-      });
     }
   }
 
@@ -326,6 +339,80 @@ function githubFileScore(
   if (/(token|erc20|test)/.test(lowerFile)) score -= 6;
 
   return Math.max(0, Math.min(100, score));
+}
+
+async function discoverFromWebsite(
+  website?: string
+): Promise<ContractAddressCandidate[]> {
+  if (typeof website !== "string" || !website.trim()) {
+    return [];
+  }
+
+  let url: URL;
+  try {
+    url = new URL(website.trim());
+    if (!/^https?:$/.test(url.protocol)) return [];
+  } catch {
+    return [];
+  }
+
+  try {
+    const response = await fetchWithTimeout(
+      url.toString(),
+      {
+        headers: {
+          accept: "text/html,application/xhtml+xml",
+          "user-agent": "Mozilla/5.0 (compatible; bughunt-researcher/1.0)"
+        }
+      }
+    );
+
+    if (!response.ok) return [];
+
+    const html = (await response.text()).slice(0, 250_000);
+    const candidates: ContractAddressCandidate[] = [];
+
+    for (const match of html.matchAll(ADDRESS_RE)) {
+      const offset = match.index ?? 0;
+      const context = html.slice(
+        Math.max(0, offset - 260),
+        Math.min(html.length, offset + 420)
+      );
+
+      const lower = context.toLowerCase();
+      let score = 45;
+
+      if (/\b(bsc|binance|bnb smart chain|chain.?id.{0,12}56)\b/.test(lower)) {
+        score += 30;
+      }
+
+      if (
+        /(router|factory|vault|pool|gauge|masterchef|staking|bridge|treasury|governance|timelock|proxy|implementation)/.test(
+          lower
+        )
+      ) {
+        score += 15;
+      }
+
+      if (score < 55) continue;
+
+      candidates.push({
+        address: match[0],
+        source: "github",
+        role: roleFromContext(context),
+        score: Math.min(100, score),
+        evidence:
+          "Website " +
+          url.origin +
+          " exposed address context: " +
+          context.replace(/\s+/g, " ").slice(0, 280)
+      });
+    }
+
+    return uniqueAddresses(candidates).slice(0, 10);
+  } catch {
+    return [];
+  }
 }
 
 async function discoverFromGithub(
@@ -488,7 +575,8 @@ export async function discoverBscContractAddresses(
   const marketSources =
     await Promise.all([
       discoverFromDexScreener(protocol),
-      discoverFromDexScanner(protocol)
+      discoverFromDexScanner(protocol),
+      discoverFromWebsite(protocol.url)
     ]);
 
   for (const group of marketSources) {
@@ -507,7 +595,14 @@ export async function discoverBscContractAddresses(
   // BscScan web search is a slow/best-effort fallback. Never make it a
   // mandatory call for every protocol when cheaper sources already resolved
   // credible candidates.
-  if (!hasStrongCore && ranked.length === 0) {
+  const hasCredibleCore = ranked.some(
+    (item) =>
+      (item.role === "core" ||
+        item.role === "implementation") &&
+      item.score >= 70
+  );
+
+  if (!hasStrongCore && !hasCredibleCore) {
     candidates.push(
       ...(await discoverFromBscScan(protocol))
     );
