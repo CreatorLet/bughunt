@@ -387,7 +387,7 @@ async function discoverFromGithub(
             )
           )
       )
-      .slice(0, 18);
+      .slice(0, 8);
 
     const responses = await Promise.all(
       files.map(async (item) => {
@@ -484,43 +484,34 @@ export async function discoverBscContractAddresses(
     }
   }
 
-  const baseRanked = uniqueAddresses(candidates);
-  const hasStrongCore = baseRanked.some(
+  const independentSources =
+    await Promise.all([
+      discoverFromDexScreener(protocol),
+      discoverFromDexScanner(protocol),
+      discoverFromBscScan(protocol)
+    ]);
+
+  for (const group of independentSources) {
+    candidates.push(...group);
+  }
+
+  let ranked = uniqueAddresses(candidates);
+  const hasStrongCore = ranked.some(
     (item) =>
       (item.role === "core" ||
         item.role === "implementation") &&
       item.score >= 85
   );
 
-  const discoveryTasks: Promise<ContractAddressCandidate[]>[] =
-    [
-      discoverFromDexScreener(protocol),
-      discoverFromDexScanner(protocol),
-      discoverFromBscScan(protocol)
-    ];
-
-  if (!hasStrongCore) {
-    discoveryTasks.push(
-      discoverFromGithub(protocol.github)
-    );
-  } else if (
-    baseRanked.length < Math.min(3, maxCandidates)
+  if (
+    !hasStrongCore &&
+    protocol.github
   ) {
-    discoveryTasks.push(
-      discoverFromGithub(protocol.github)
+    candidates.push(
+      ...(await discoverFromGithub(protocol.github))
     );
+    ranked = uniqueAddresses(candidates);
   }
 
-  const discovered = await Promise.all(
-    discoveryTasks
-  );
-
-  for (const group of discovered) {
-    candidates.push(...group);
-  }
-
-  return uniqueAddresses(candidates).slice(
-    0,
-    maxCandidates
-  );
+  return ranked.slice(0, maxCandidates);
 }
