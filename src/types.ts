@@ -21,6 +21,7 @@ export type ContractAddressSource =
   | "defillama"
   | "defillama-detail"
   | "github"
+  | "website"
   | "dexscreener"
   | "dexscanner"
   | "bscscan";
