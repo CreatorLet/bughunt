@@ -47,6 +47,36 @@ function scoreCandidate(candidate: ScanCandidate): number {
   return candidate.contract?.severity?.score ?? 0;
 }
 
+function discoverySelectionScore(
+  role: string,
+  discoveryScore: number,
+  report: ContractResearch
+): number {
+  const roleBonus =
+    role === "core"
+      ? 28
+      : role === "implementation"
+        ? 24
+        : role === "related"
+          ? 10
+          : role === "token"
+            ? 4
+            : 2;
+
+  const verifiedBonus = report.sourceVerified ? 24 : 0;
+  const namedContractBonus = report.contractName ? 5 : 0;
+  const severitySignal =
+    Math.min(100, report.severity?.score ?? 0) * 0.35;
+
+  return (
+    roleBonus +
+    verifiedBonus +
+    namedContractBonus +
+    discoveryScore * 0.25 +
+    severitySignal
+  );
+}
+
 function compactContract(
   report: ContractResearch | undefined
 ): Record<string, unknown> | null {
@@ -302,9 +332,14 @@ async function writeReport(
               (item) =>
                 item.address +
                 " [" +
+                item.role +
+                "/" +
                 item.source +
                 ", score " +
                 item.score +
+                (item.matchedName
+                  ? ", name " + item.matchedName
+                  : "") +
                 "]"
             )
             .join("; ")
@@ -466,7 +501,7 @@ export async function runBscScan(
         candidate.addressCandidates =
           await discoverBscContractAddresses(
             protocol,
-            2
+            8
           );
 
         const primary =
@@ -484,18 +519,23 @@ export async function runBscScan(
         const addressesToResearch =
           candidate.addressCandidates.slice(
             0,
-            primary.source === "defillama" ? 1 : 2
+            Math.min(4, candidate.addressCandidates.length)
           );
 
         const researched = await mapWithConcurrency(
           addressesToResearch,
-          Math.min(2, addressesToResearch.length),
+          Math.min(3, addressesToResearch.length),
           async (addressCandidate) => {
             try {
-              return await researchContract(
+              const report = await researchContract(
                 addressCandidate.address,
                 { includeRugpull: false }
               );
+
+              return {
+                addressCandidate,
+                report
+              };
             } catch {
               return null;
             }
@@ -503,36 +543,50 @@ export async function runBscScan(
         );
 
         const valid = researched.filter(
-          (value): value is ContractResearch =>
-            Boolean(value)
+          (
+            value
+          ): value is {
+            addressCandidate: NonNullable<
+              ScanCandidate["addressCandidates"]
+            >[number];
+            report: ContractResearch;
+          } => Boolean(value)
         );
 
         if (!valid.length) {
           candidate.aiSkippedReason =
-            "Discovered addresses could not be researched on Etherscan.";
+            "Discovered addresses were found, but none could be researched on Etherscan/BscScan.";
           return candidate;
         }
 
         valid.sort((a, b) => {
-          const aScore =
-            a.severity?.score ??
-            (a.surfaceScore + a.heuristicScore);
-          const bScore =
-            b.severity?.score ??
-            (b.surfaceScore + b.heuristicScore);
+          const aScore = discoverySelectionScore(
+            a.addressCandidate.role,
+            a.addressCandidate.score,
+            a.report
+          );
+          const bScore = discoverySelectionScore(
+            b.addressCandidate.role,
+            b.addressCandidate.score,
+            b.report
+          );
           return bScore - aScore;
         });
 
-        const selectedContract = valid[0];
+        const selected = valid[0];
 
-        if (!selectedContract) {
+        if (!selected) {
           candidate.aiSkippedReason =
             "No valid researched contract remained after screening.";
           return candidate;
         }
 
+        const selectedContract = selected.report;
+
         candidate.contract = selectedContract;
         candidate.address = selectedContract.address;
+        candidate.addressSource =
+          selected.addressCandidate.source;
         candidate.market = selectedContract.market;
         candidate.severityScore =
           selectedContract.severity?.score ?? 0;
