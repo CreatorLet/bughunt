@@ -362,7 +362,7 @@ async function writeReport(
         .join(", ");
 
       lines.push(
-        `   - Source: ${candidate.contract.sourceVerified ? "verified" : "not verified"}`
+        `   - Source: ${candidate.contract.sourceVerified ? "verified" : "not verified"}${candidate.contract.sourceQuality ? " (" + candidate.contract.sourceQuality + ")" : ""}`
       );
       lines.push(
         `   - Interesting functions: ${surfaces || "none detected"}`
