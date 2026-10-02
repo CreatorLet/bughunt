@@ -6,6 +6,7 @@ import { analyzeWithDeepSeek } from "../analysis/deepseek.js";
 import { getAbi, getSourceCode } from "../providers/etherscan.js";
 import { getRugpullSignals, getTokenSecurity } from "../providers/goplus.js";
 import { getMarketContext } from "../providers/dexscanner.js";
+import { getBestDexScreenerPair } from "../providers/dexscreener.js";
 import type { ContractResearch } from "../types.js";
 
 function validateAddress(address: string): string {
@@ -89,11 +90,29 @@ export async function researchContract(
   let market: ContractResearch["market"];
   try {
     market = await getMarketContext(address);
+
+    // DexScanner is the first market source. If its ranked feed does not
+    // contain the address, use DEX Screener's documented token lookup as an
+    // exact-address fallback so a discovered token still gets market context.
+    if (!market.matched) {
+      const fallbackPair = await getBestDexScreenerPair(address);
+      if (fallbackPair) {
+        market = {
+          provider: "dexscreener",
+          matched: true,
+          pairCount: 1,
+          pair: fallbackPair,
+          warnings: market.warnings
+        };
+      }
+    }
   } catch (error) {
+    const fallbackPair = await getBestDexScreenerPair(address);
     market = {
-      provider: "dexscanner",
-      matched: false,
-      pairCount: 0,
+      provider: fallbackPair ? "dexscreener" : "dexscanner",
+      matched: Boolean(fallbackPair),
+      pairCount: fallbackPair ? 1 : 0,
+      pair: fallbackPair,
       warnings: [
         error instanceof Error ? error.message : String(error)
       ]
@@ -193,7 +212,7 @@ export function summarizeContract(report: ContractResearch): string {
       " (" + (report.severity?.level ?? "informational") + ")",
     "Heuristic score: " + report.heuristicScore,
     "Surface score: " + report.surfaceScore,
-    "DEX market: " +
+    "DEX market (" + (report.market?.provider ?? "none") + "): " +
       (report.market?.matched
         ? "matched " + String(report.market.pair?.baseToken?.symbol ?? "pair")
         : "no indexed matching pair"),
