@@ -25,6 +25,77 @@ export interface ContractAddressCandidate {
   file?: string;
 }
 
+export interface DexScannerPair {
+  chainId?: string;
+  dexId?: string;
+  pairAddress?: string;
+  baseToken?: {
+    address?: string;
+    name?: string;
+    symbol?: string;
+  };
+  quoteToken?: {
+    address?: string;
+    name?: string;
+    symbol?: string;
+  };
+  priceUsd?: string;
+  priceChange?: {
+    m5?: number;
+    h1?: number;
+    h6?: number;
+    h24?: number;
+  };
+  volume?: {
+    h24?: number;
+  };
+  liquidity?: {
+    usd?: number;
+    base?: number;
+    quote?: number;
+  };
+  txns?: {
+    h24?: {
+      buys?: number;
+      sells?: number;
+    };
+  };
+  fdv?: number;
+  marketCap?: number;
+  pairCreatedAt?: number;
+  info?: {
+    imageUrl?: string;
+    socials?: unknown[];
+  };
+  [key: string]: unknown;
+}
+
+export interface MarketContext {
+  provider: "dexscanner";
+  matched: boolean;
+  pairCount: number;
+  pair?: DexScannerPair;
+  warnings?: string[];
+}
+
+export type SeverityLevel =
+  | "critical"
+  | "high"
+  | "medium"
+  | "low"
+  | "informational";
+
+export interface SeverityAssessment {
+  score: number;
+  level: SeverityLevel;
+  factors: Array<{
+    id: string;
+    points: number;
+    level: SeverityLevel;
+    reason: string;
+  }>;
+}
+
 export interface EtherscanSourceRecord {
   SourceCode?: string;
   ABI?: string;
@@ -47,6 +118,11 @@ export interface GoPlusTokenSecurity {
   is_open_source?: string;
   is_proxy?: string;
   is_mintable?: string;
+  is_honeypot?: string;
+  cannot_buy?: string;
+  cannot_sell_all?: string;
+  buy_tax?: string;
+  sell_tax?: string;
   owner_address?: string;
   creator_address?: string;
   malicious_address?: string;
@@ -93,8 +169,12 @@ export interface ScanCandidate {
   addressCandidates?: ContractAddressCandidate[];
   audits?: number | string;
   url?: string;
+  market?: MarketContext;
   contract?: ContractResearch;
   screenScore: number;
+  severityScore?: number;
+  severityLevel?: SeverityLevel;
+  severityFactors?: SeverityAssessment["factors"];
   aiSelected: boolean;
   aiSkippedReason?: string;
 }
@@ -124,10 +204,12 @@ export interface ContractResearch {
   rugpullSignals?: Record<string, unknown> | null;
   goPlusError?: string;
   rugpullError?: string;
+  market?: MarketContext;
   heuristics: HeuristicFinding[];
   heuristicScore: number;
   functionNames?: string[];
   functionSurfaces?: FunctionSurface[];
   surfaceScore: number;
+  severity?: SeverityAssessment;
   aiAnalysis?: DeepSeekAnalysis;
 }
