@@ -1,9 +1,10 @@
+import { fetchWithTimeout } from "./http.js";
 import type { DefiLlamaProtocol } from "../types.js";
 
 const BASE_URL = "https://api.llama.fi";
 
 async function getJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, { headers: { accept: "application/json" } });
+  const response = await fetchWithTimeout(url, { headers: { accept: "application/json" } });
   if (!response.ok) {
     throw new Error("DeFiLlama request failed: HTTP " + response.status);
   }
