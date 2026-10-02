@@ -67,8 +67,8 @@ async function getJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-function normalizeGithubUrl(value?: string): string | undefined {
-  if (!value) return undefined;
+function normalizeGithubUrl(value?: unknown): string | undefined {
+  if (typeof value !== "string" || !value.trim()) return undefined;
 
   const cleaned = value
     .trim()
@@ -87,7 +87,7 @@ function normalizeGithubUrl(value?: string): string | undefined {
 }
 
 function extractRepo(
-  value?: string
+  value?: unknown
 ): { owner: string; repo: string } | undefined {
   const normalized = normalizeGithubUrl(value);
   if (!normalized) return undefined;
@@ -329,7 +329,7 @@ function githubFileScore(
 }
 
 async function discoverFromGithub(
-  github?: string
+  github?: unknown
 ): Promise<ContractAddressCandidate[]> {
   const repo = extractRepo(github);
   if (!repo) return [];
