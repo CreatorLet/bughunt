@@ -1,3 +1,4 @@
+import { config } from "../config.js";
 import type { ContractAddressCandidate, DefiLlamaProtocol, DexScannerPair } from "../types.js";
 
 const BASE_URL = "https://api.dexscreener.com";
@@ -199,6 +200,8 @@ export async function getPairsForToken(address: string): Promise<DexScannerPair[
 export async function discoverFromDexScreener(
   protocol: DefiLlamaProtocol
 ): Promise<ContractAddressCandidate[]> {
+  if (!config.dexScreenerEnabled) return [];
+
   const terms = searchTerms(protocol);
   if (!terms.length) return [];
 
@@ -276,6 +279,8 @@ export async function discoverFromDexScreener(
 export async function getBestDexScreenerPair(
   address: string
 ): Promise<DexScannerPair | undefined> {
+  if (!config.dexScreenerEnabled) return undefined;
+
   try {
     const pairs = await getPairsForToken(address);
     return [...pairs].sort(
