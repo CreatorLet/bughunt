@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { fetchWithTimeout } from "./http.js";
 import type { ContractAddressCandidate, DefiLlamaProtocol, DexScannerPair } from "../types.js";
 
 const BASE_URL = "https://api.dexscreener.com";
@@ -121,7 +122,7 @@ async function fetchJson<T>(url: string): Promise<T> {
   let response: Response;
 
   try {
-    response = await fetch(url, {
+    response = await fetchWithTimeout(url, {
       headers: {
         accept: "application/json",
         "user-agent": "bughunt-researcher"
