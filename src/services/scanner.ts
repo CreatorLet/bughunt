@@ -501,6 +501,17 @@ export async function runBscScan(
       }
 
       try {
+        const position =
+          candidates.findIndex(
+            (item) =>
+              item.protocolName === candidate.protocolName &&
+              item.slug === candidate.slug
+          ) + 1;
+
+        console.log(
+          `[Discovery ${position}/${candidates.length}] ${candidate.protocolName} — resolving BSC addresses...`
+        );
+
         candidate.addressCandidates =
           await discoverBscContractAddresses(
             protocol,
@@ -518,6 +529,10 @@ export async function runBscScan(
 
         candidate.address = primary.address;
         candidate.addressSource = primary.source;
+
+        console.log(
+          `[Discovery ${position}/${candidates.length}] ${candidate.protocolName} — found ${candidate.addressCandidates.length} address candidate(s); researching contracts...`
+        );
 
         const addressesToResearch =
           candidate.addressCandidates.slice(
@@ -557,6 +572,9 @@ export async function runBscScan(
         );
 
         if (!valid.length) {
+          console.log(
+            `[Discovery ${position}/${candidates.length}] ${candidate.protocolName} — addresses found, but contract research failed.`
+          );
           candidate.aiSkippedReason =
             "Discovered addresses were found, but none could be researched on Etherscan/BscScan.";
           return candidate;
@@ -587,6 +605,10 @@ export async function runBscScan(
         const selectedContract = selected.report;
 
         candidate.contract = selectedContract;
+
+        console.log(
+          `[Discovery ${position}/${candidates.length}] ${candidate.protocolName} — selected ${selectedContract.address}`
+        );
         candidate.address = selectedContract.address;
         candidate.addressSource =
           selected.addressCandidate.source;
@@ -613,8 +635,11 @@ export async function runBscScan(
           candidate.addressSource = selectedAddress.source;
         }
       } catch (error) {
+        console.log(
+          `[Discovery] ${candidate.protocolName} — discovery error: ${error instanceof Error ? error.message : String(error)}`
+        );
         candidate.aiSkippedReason =
-          "contract discovery failed: " +
+          "contract discovery failed: "
           (error instanceof Error
             ? error.message
             : String(error));
