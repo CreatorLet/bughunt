@@ -30,7 +30,12 @@ async function mapWithConcurrency<T, R>(
   }
 
   const runners = Array.from(
-    { length: Math.min(Math.max(1, concurrency), items.length || 1) },
+    {
+      length: Math.min(
+        Math.max(1, concurrency),
+        items.length || 1
+      )
+    },
     () => runner()
   );
 
@@ -39,43 +44,24 @@ async function mapWithConcurrency<T, R>(
 }
 
 function scoreCandidate(candidate: ScanCandidate): number {
-  const report = candidate.contract;
-
-  if (!report) return 0;
-
-  let score = report.surfaceScore + report.heuristicScore;
-
-  if (report.sourceVerified) score += 2;
-
-  const surfaces = report.functionSurfaces ?? [];
-
-  if (surfaces.some((s) => s.kind === "money-moving")) score += 3;
-  if (surfaces.some((s) => s.kind === "privileged")) score += 3;
-  if (surfaces.some((s) => s.kind === "financial-state")) score += 2;
-  if (surfaces.some((s) => s.kind === "external-execution")) score += 2;
-
-  const tokenSecurity = report.goPlus;
-
-  if (tokenSecurity?.is_mintable === "1") score += 2;
-  if (tokenSecurity?.is_proxy === "1") score += 2;
-  if (tokenSecurity?.is_honeypot === "1") score += 4;
-  if (tokenSecurity?.cannot_buy === "1") score += 2;
-  if (tokenSecurity?.cannot_sell_all === "1") score += 2;
-
-  return score;
+  return candidate.contract?.severity?.score ?? 0;
 }
 
-function compactContract(report: ContractResearch | undefined): Record<string, unknown> | null {
+function compactContract(
+  report: ContractResearch | undefined
+): Record<string, unknown> | null {
   if (!report) return null;
 
   return {
     address: report.address,
     contractName: report.contractName,
     sourceVerified: report.sourceVerified,
-    surfaceScore: report.surfaceScore,
+    severity: report.severity ?? null,
     heuristicScore: report.heuristicScore,
+    surfaceScore: report.surfaceScore,
     functionNames: report.functionNames ?? [],
     functionSurfaces: report.functionSurfaces ?? [],
+    market: report.market ?? null,
     goPlus: report.goPlus
       ? {
           token_name: report.goPlus.token_name,
@@ -106,12 +92,15 @@ function aiText(analysis: DeepSeekAnalysis | undefined): string {
 
   const result = analysis.result as Record<string, unknown> | null;
   const findings = Array.isArray(result?.findings) ? result.findings : [];
+  const usage = analysis.usage;
 
   return (
     "AI findings: " +
     findings.length +
     " | tokens: " +
-    String(analysis.usage?.total_tokens ?? "n/a")
+    String(usage?.total_tokens ?? "n/a") +
+    " | input: " +
+    String(usage?.prompt_tokens ?? "n/a")
   );
 }
 
@@ -142,7 +131,10 @@ function formatFinding(
 
   const functions = finding.affected_functions;
   if (Array.isArray(functions) && functions.length) {
-    lines.push("- Affected functions: " + functions.map(String).join(", "));
+    lines.push(
+      " - Affected functions: " +
+        functions.map(String).join(", ")
+    );
   }
 
   const fields: Array<[string, string]> = [
@@ -162,10 +154,12 @@ function formatFinding(
     if (value === undefined || value === null) continue;
 
     lines.push(
-      "- " +
+      " - " +
         label +
         ": " +
-        (typeof value === "string" ? value : JSON.stringify(value))
+        (typeof value === "string"
+          ? value
+          : JSON.stringify(value))
     );
   }
 
@@ -180,22 +174,39 @@ async function writeReport(
     maxTvl: number;
     limit: number;
     aiLimit: number;
+    aiMinSeverityScore: number;
   }
 ): Promise<{ jsonPath: string; markdownPath: string }> {
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const reportDir = path.resolve("reports");
   await mkdir(reportDir, { recursive: true });
 
+  const severityCounts = candidates.reduce(
+    (acc, candidate) => {
+      const level = candidate.severityLevel ?? "informational";
+      acc[level] = (acc[level] ?? 0) + 1;
+      return acc;
+    },
+    {} as Record<string, number>
+  );
+
   const summary = {
     generatedAt: new Date().toISOString(),
     chain: config.chainName,
     chainId: config.chainId,
-    tvlRange: { min: options.minTvl, max: options.maxTvl },
+    tvlRange: {
+      min: options.minTvl,
+      max: options.maxTvl
+    },
     protocolLimit: options.limit,
     aiLimit: options.aiLimit,
+    aiMinSeverityScore: options.aiMinSeverityScore,
     protocolsFound: candidates.length,
     contractsAnalyzed: candidates.filter((c) => c.contract).length,
-    aiAnalyzed: candidates.filter((c) => c.contract?.aiAnalysis).length,
+    aiAnalyzed: candidates.filter(
+      (c) => c.contract?.aiAnalysis
+    ).length,
+    severityCounts,
     candidates: candidates.map((candidate) => ({
       protocolName: candidate.protocolName,
       slug: candidate.slug,
@@ -206,15 +217,26 @@ async function writeReport(
       addressCandidates: candidate.addressCandidates ?? [],
       audits: candidate.audits,
       url: candidate.url,
+      market: candidate.market ?? null,
       screenScore: candidate.screenScore,
+      severityScore: candidate.severityScore ?? 0,
+      severityLevel: candidate.severityLevel ?? "informational",
+      severityFactors: candidate.severityFactors ?? [],
       aiSelected: candidate.aiSelected,
       aiSkippedReason: candidate.aiSkippedReason,
       contract: compactContract(candidate.contract)
     }))
   };
 
-  const jsonPath = path.join(reportDir, `scan-${timestamp}.json`);
-  await writeFile(jsonPath, JSON.stringify(summary, null, 2), "utf8");
+  const jsonPath = path.join(
+    reportDir,
+    `scan-${timestamp}.json`
+  );
+  await writeFile(
+    jsonPath,
+    JSON.stringify(summary, null, 2),
+    "utf8"
+  );
 
   const lines = [
     "# Bughunt BSC Research Scan",
@@ -224,6 +246,7 @@ async function writeReport(
     `Protocols found: ${summary.protocolsFound}`,
     `Contracts analyzed: ${summary.contractsAnalyzed}`,
     `AI analyzed: ${summary.aiAnalyzed}`,
+    `AI threshold: ${options.aiMinSeverityScore}`,
     "",
     "## Candidates",
     ""
@@ -231,27 +254,75 @@ async function writeReport(
 
   candidates.forEach((candidate, index) => {
     lines.push(
-      `${index + 1}. **${candidate.protocolName}** — $${candidate.tvl.toLocaleString()} — score ${candidate.screenScore}`
+      `${index + 1}. **${candidate.protocolName}** — $${candidate.tvl.toLocaleString()} — severity ${candidate.severityScore ?? 0}/100 (${candidate.severityLevel ?? "informational"})`
     );
-    lines.push(`   - Address: ${candidate.address ?? "not discovered"}`);
-    lines.push(`   - Address source: ${candidate.addressSource ?? "none"}`);
-    lines.push(`   - Category: ${candidate.category ?? "unknown"}`);
-    lines.push(`   - Audits reported by DeFiLlama: ${candidate.audits ?? "unknown"}`);
+    lines.push(
+      `   - Address: ${candidate.address ?? "not discovered"}`
+    );
+    lines.push(
+      `   - Address source: ${candidate.addressSource ?? "none"}`
+    );
+    lines.push(
+      `   - Category: ${candidate.category ?? "unknown"}`
+    );
+    lines.push(
+      `   - Audits reported by DeFiLlama: ${candidate.audits ?? "unknown"}`
+    );
+
+    if (candidate.market?.matched && candidate.market.pair) {
+      const pair = candidate.market.pair;
+      lines.push(
+        `   - DEX: ${pair.dexId ?? "unknown"} | Pair: ${pair.pairAddress ?? "unknown"} | Liquidity: $${Number(pair.liquidity?.usd ?? 0).toLocaleString()} | 24h volume: $${Number(pair.volume?.h24 ?? 0).toLocaleString()}`
+      );
+    } else {
+      lines.push("   - DEX market: no matching indexed pair");
+    }
+
+    if (candidate.severityFactors?.length) {
+      lines.push(
+        "   - Severity factors: " +
+          candidate.severityFactors
+            .slice(0, 10)
+            .map(
+              (factor) =>
+                "+" +
+                factor.points +
+                " " +
+                factor.id
+            )
+            .join(", ")
+      );
+    }
 
     if (candidate.addressCandidates?.length) {
       lines.push(
         "   - Address candidates: " +
           candidate.addressCandidates
-            .map((item) => item.address + " [" + item.source + ", score " + item.score + "]")
+            .map(
+              (item) =>
+                item.address +
+                " [" +
+                item.source +
+                ", score " +
+                item.score +
+                "]"
+            )
             .join("; ")
       );
     }
 
     if (!candidate.contract) {
-      lines.push("   - Status: no analyzed BSC contract was discovered");
+      lines.push(
+        "   - Status: no analyzed BSC contract was discovered"
+      );
     } else {
-      const surfaces = (candidate.contract.functionSurfaces ?? [])
-        .map((surface) => `${surface.name} [${surface.kind}]`)
+      const surfaces = (
+        candidate.contract.functionSurfaces ?? []
+      )
+        .map(
+          (surface) =>
+            `${surface.name} [${surface.kind}]`
+        )
         .join(", ");
 
       lines.push(
@@ -260,63 +331,119 @@ async function writeReport(
       lines.push(
         `   - Interesting functions: ${surfaces || "none detected"}`
       );
-      lines.push(`   - ${aiText(candidate.contract.aiAnalysis)}`);
+      lines.push(
+        `   - ${aiText(candidate.contract.aiAnalysis)}`
+      );
 
-      const aiFindings = getAiFindings(candidate.contract.aiAnalysis);
+      if (candidate.aiSkippedReason) {
+        lines.push(
+          `   - AI selection: ${candidate.aiSkippedReason}`
+        );
+      }
+
+      const aiFindings = getAiFindings(
+        candidate.contract.aiAnalysis
+      );
+
       if (aiFindings.length) {
         lines.push("");
         lines.push("   ## DeepSeek findings");
         lines.push("");
+
         aiFindings.forEach((finding, findingIndex) => {
-          for (const line of formatFinding(finding, findingIndex)) {
+          for (const line of formatFinding(
+            finding,
+            findingIndex
+          )) {
             lines.push("   " + line);
           }
         });
       }
 
       if (candidate.contract.goPlusError) {
-        lines.push(`   - GoPlus: ${candidate.contract.goPlusError}`);
+        lines.push(
+          `   - GoPlus: ${candidate.contract.goPlusError}`
+        );
+      }
+
+      if (candidate.contract.market?.warnings?.length) {
+        lines.push(
+          "   - DexScanner warnings: " +
+            candidate.contract.market.warnings.join("; ")
+        );
       }
     }
 
     lines.push("");
   });
 
-  const markdownPath = path.join(reportDir, `scan-${timestamp}.md`);
-  await writeFile(markdownPath, lines.join("\n"), "utf8");
+  const markdownPath = path.join(
+    reportDir,
+    `scan-${timestamp}.md`
+  );
+  await writeFile(
+    markdownPath,
+    lines.join("\n"),
+    "utf8"
+  );
 
   return { jsonPath, markdownPath };
 }
 
-export async function runBscScan(options: {
-  minTvl?: number;
-  maxTvl?: number;
-  limit?: number;
-  aiLimit?: number;
-  concurrency?: number;
-} = {}): Promise<{
+export async function runBscScan(
+  options: {
+    minTvl?: number;
+    maxTvl?: number;
+    limit?: number;
+    aiLimit?: number;
+    aiMinSeverityScore?: number;
+    concurrency?: number;
+  } = {}
+): Promise<{
   candidates: ScanCandidate[];
   jsonPath: string;
   markdownPath: string;
 }> {
   const minTvl = options.minTvl ?? config.minTvl;
   const maxTvl = options.maxTvl ?? config.maxTvl;
-  const limit = Math.max(1, Math.floor(options.limit ?? 20));
-  const aiLimit = Math.max(0, Math.floor(options.aiLimit ?? limit));
-  const concurrency = Math.max(1, Math.floor(options.concurrency ?? 4));
+  const limit = Math.max(
+    1,
+    Math.floor(options.limit ?? config.protocolLimit)
+  );
+  const aiLimit = Math.max(
+    0,
+    Math.floor(options.aiLimit ?? config.defaultAiLimit)
+  );
+  const aiMinSeverityScore = Math.max(
+    0,
+    Math.floor(
+      options.aiMinSeverityScore ??
+        config.aiMinSeverityScore
+    )
+  );
+  const concurrency = Math.max(
+    1,
+    Math.floor(options.concurrency ?? 4)
+  );
 
-  const protocols = await listBscProtocols(minTvl, maxTvl, limit);
+  const protocols = await listBscProtocols(
+    minTvl,
+    maxTvl,
+    limit
+  );
 
-  const candidates: ScanCandidate[] = protocols.map((protocol) => ({
-    protocolName: protocol.name ?? protocol.slug ?? "Unknown",
-    slug: protocol.slug,
-    category: protocol.category,
-    tvl: Number(protocol.tvl ?? 0),
-    audits: protocol.audits,
-    url: protocol.url,
-    screenScore: 0,
-    aiSelected: false
-  }));
+  const candidates: ScanCandidate[] =
+    protocols.map((protocol) => ({
+      protocolName:
+        protocol.name ?? protocol.slug ?? "Unknown",
+      slug: protocol.slug,
+      category: protocol.category,
+      tvl: Number(protocol.tvl ?? 0),
+      audits: protocol.audits,
+      url: protocol.url,
+      screenScore: 0,
+      aiSelected: false
+    }));
 
   const discovered = await mapWithConcurrency(
     candidates,
@@ -324,18 +451,26 @@ export async function runBscScan(options: {
     async (candidate) => {
       const protocol = protocols.find(
         (item: DefiLlamaProtocol) =>
-          (item.name ?? item.slug ?? "Unknown") === candidate.protocolName &&
+          (item.name ?? item.slug ?? "Unknown") ===
+            candidate.protocolName &&
           item.slug === candidate.slug
       );
 
       if (!protocol) {
-        candidate.aiSkippedReason = "Protocol metadata could not be matched.";
+        candidate.aiSkippedReason =
+          "Protocol metadata could not be matched.";
         return candidate;
       }
 
       try {
-        candidate.addressCandidates = await discoverBscContractAddresses(protocol, 2);
-        const primary = candidate.addressCandidates[0];
+        candidate.addressCandidates =
+          await discoverBscContractAddresses(
+            protocol,
+            2
+          );
+
+        const primary =
+          candidate.addressCandidates[0];
 
         if (!primary) {
           candidate.aiSkippedReason =
@@ -346,20 +481,21 @@ export async function runBscScan(options: {
         candidate.address = primary.address;
         candidate.addressSource = primary.source;
 
-        // DeFiLlama usually provides the most authoritative address. For fallback
-        // discovery, research up to two candidates and keep the most interesting
-        // verified contract rather than blindly trusting the first regex match.
-        const addressesToResearch = candidate.addressCandidates
-          .slice(0, primary.source === "defillama" ? 1 : 2);
+        const addressesToResearch =
+          candidate.addressCandidates.slice(
+            0,
+            primary.source === "defillama" ? 1 : 2
+          );
 
         const researched = await mapWithConcurrency(
           addressesToResearch,
           Math.min(2, addressesToResearch.length),
           async (addressCandidate) => {
             try {
-              return await researchContract(addressCandidate.address, {
-                includeRugpull: false
-              });
+              return await researchContract(
+                addressCandidate.address,
+                { includeRugpull: false }
+              );
             } catch {
               return null;
             }
@@ -367,47 +503,64 @@ export async function runBscScan(options: {
         );
 
         const valid = researched.filter(
-          (value): value is ContractResearch => Boolean(value)
+          (value): value is ContractResearch =>
+            Boolean(value)
         );
 
         if (!valid.length) {
-          candidate.aiSkippedReason = "Discovered addresses could not be researched on Etherscan.";
+          candidate.aiSkippedReason =
+            "Discovered addresses could not be researched on Etherscan.";
           return candidate;
         }
 
         valid.sort((a, b) => {
           const aScore =
-            a.surfaceScore +
-            a.heuristicScore +
-            (a.sourceVerified ? 5 : 0) +
-            (a.functionSurfaces?.length ?? 0);
+            a.severity?.score ??
+            (a.surfaceScore + a.heuristicScore);
           const bScore =
-            b.surfaceScore +
-            b.heuristicScore +
-            (b.sourceVerified ? 5 : 0) +
-            (b.functionSurfaces?.length ?? 0);
+            b.severity?.score ??
+            (b.surfaceScore + b.heuristicScore);
           return bScore - aScore;
         });
 
         const selectedContract = valid[0];
+
         if (!selectedContract) {
-          candidate.aiSkippedReason = "No valid researched contract remained after screening.";
+          candidate.aiSkippedReason =
+            "No valid researched contract remained after screening.";
           return candidate;
         }
 
         candidate.contract = selectedContract;
         candidate.address = selectedContract.address;
-
-        const selected = candidate.addressCandidates.find(
-          (item) => item.address.toLowerCase() === selectedContract.address.toLowerCase()
+        candidate.market = selectedContract.market;
+        candidate.severityScore =
+          selectedContract.severity?.score ?? 0;
+        candidate.severityLevel =
+          selectedContract.severity?.level ??
+          "informational";
+        candidate.severityFactors =
+          selectedContract.severity?.factors ?? [];
+        candidate.screenScore = scoreCandidate(
+          candidate
         );
+
+        const selected =
+          candidate.addressCandidates.find(
+            (item) =>
+              item.address.toLowerCase() ===
+              selectedContract.address.toLowerCase()
+          );
+
         if (selected) {
           candidate.addressSource = selected.source;
         }
       } catch (error) {
         candidate.aiSkippedReason =
           "contract discovery failed: " +
-          (error instanceof Error ? error.message : String(error));
+          (error instanceof Error
+            ? error.message
+            : String(error));
       }
 
       candidate.screenScore = scoreCandidate(candidate);
@@ -416,84 +569,183 @@ export async function runBscScan(options: {
   );
 
   const processed = new Map(
-    discovered.map((candidate) => [candidate.protocolName + "|" + candidate.slug, candidate])
+    discovered.map((candidate) => [
+      candidate.protocolName + "|" + candidate.slug,
+      candidate
+    ])
   );
 
   for (const candidate of candidates) {
-    const result = processed.get(candidate.protocolName + "|" + candidate.slug);
-    if (result) Object.assign(candidate, result);
+    const result = processed.get(
+      candidate.protocolName + "|" + candidate.slug
+    );
+
+    if (result) {
+      Object.assign(candidate, result);
+    }
   }
 
-  const aiCandidates = candidates
-    .filter((candidate) => Boolean(candidate.contract?.sourceVerified))
-    .sort((a, b) => b.screenScore - a.screenScore)
-    .slice(0, aiLimit);
+  const sortedForAi = candidates
+    .filter(
+      (candidate) =>
+        Boolean(candidate.contract?.sourceVerified) &&
+        candidate.severityScore !== undefined
+    )
+    .sort(
+      (a, b) =>
+        (b.severityScore ?? 0) -
+        (a.severityScore ?? 0)
+    );
+
+  const riskyCandidates = sortedForAi.filter(
+    (candidate) =>
+      (candidate.severityScore ?? 0) >=
+      aiMinSeverityScore
+  );
+
+  // The threshold removes routine clean contracts from the paid AI stage.
+  // Keep one fallback candidate so a scan can still produce an AI review
+  // when the deterministic layer finds no elevated risk.
+  const aiCandidates =
+    riskyCandidates.length > 0
+      ? riskyCandidates.slice(0, aiLimit)
+      : sortedForAi.slice(0, aiLimit > 0 ? 1 : 0);
+
+  const selectedKeys = new Set(
+    aiCandidates.map(
+      (candidate) =>
+        candidate.protocolName + "|" + candidate.slug
+    )
+  );
+
+  for (const candidate of sortedForAi) {
+    if (!selectedKeys.has(
+      candidate.protocolName + "|" + candidate.slug
+    )) {
+      candidate.aiSkippedReason =
+        (candidate.severityScore ?? 0) <
+        aiMinSeverityScore
+          ? `deterministic severity ${candidate.severityScore ?? 0} is below AI threshold ${aiMinSeverityScore}`
+          : "AI budget exhausted after deterministic ranking";
+    }
+  }
 
   for (const candidate of aiCandidates) {
     candidate.aiSelected = true;
 
     try {
       const contract = candidate.contract;
+
       if (!contract?.sourceCode) {
-        candidate.aiSkippedReason = "verified source not available";
+        candidate.aiSkippedReason =
+          "verified source not available";
         continue;
       }
 
-      if (config.goPlusAppKey && config.goPlusAppSecret) {
+      if (
+        config.goPlusAppKey &&
+        config.goPlusAppSecret
+      ) {
         try {
-          contract.rugpullSignals = await getRugpullSignals(contract.address);
+          contract.rugpullSignals =
+            await getRugpullSignals(contract.address);
         } catch (error) {
           contract.rugpullError =
-            error instanceof Error ? error.message : String(error);
+            error instanceof Error
+              ? error.message
+              : String(error);
         }
       }
 
-      contract.aiAnalysis = await analyzeWithDeepSeek({
-        address: contract.address,
-        contractName: contract.contractName,
-        source: contract.sourceCode,
-        heuristicFindings: contract.heuristics,
-        context: {
-          chain: config.chainName,
-          chainId: config.chainId,
-          protocolName: candidate.protocolName,
-          protocolSlug: candidate.slug,
-          category: candidate.category,
-          tvl: candidate.tvl,
-          auditsReportedByDefiLlama: candidate.audits,
-          functionSurfaces: contract.functionSurfaces ?? [],
-          surfaceScore: contract.surfaceScore,
-          goPlus: contract.goPlus
-            ? {
-                is_open_source: contract.goPlus.is_open_source,
-                is_proxy: contract.goPlus.is_proxy,
-                is_mintable: contract.goPlus.is_mintable,
-                is_honeypot: contract.goPlus.is_honeypot,
-                cannot_buy: contract.goPlus.cannot_buy,
-                cannot_sell_all: contract.goPlus.cannot_sell_all,
-                buy_tax: contract.goPlus.buy_tax,
-                sell_tax: contract.goPlus.sell_tax,
-                holder_count: contract.goPlus.holder_count,
-                total_supply: contract.goPlus.total_supply
-              }
-            : null
-        }
-      });
+      contract.aiAnalysis =
+        await analyzeWithDeepSeek({
+          address: contract.address,
+          contractName: contract.contractName,
+          source: contract.sourceCode,
+          maxSourceChars: config.aiSourceChars,
+          heuristicFindings:
+            contract.heuristics,
+          context: {
+            chain: config.chainName,
+            chainId: config.chainId,
+            protocolName: candidate.protocolName,
+            protocolSlug: candidate.slug,
+            category: candidate.category,
+            tvl: candidate.tvl,
+            auditsReportedByDefiLlama:
+              candidate.audits,
+            functionSurfaces:
+              contract.functionSurfaces ?? [],
+            surfaceScore: contract.surfaceScore,
+            severityScore:
+              contract.severity?.score ?? 0,
+            severityLevel:
+              contract.severity?.level ??
+              "informational",
+            severityFactors:
+              contract.severity?.factors ?? [],
+            market: contract.market
+              ? {
+                  matched: contract.market.matched,
+                  pairCount:
+                    contract.market.pairCount,
+                  pair: contract.market.pair ?? null
+                }
+              : null,
+            goPlus: contract.goPlus
+              ? {
+                  is_open_source:
+                    contract.goPlus.is_open_source,
+                  is_proxy:
+                    contract.goPlus.is_proxy,
+                  is_mintable:
+                    contract.goPlus.is_mintable,
+                  is_honeypot:
+                    contract.goPlus.is_honeypot,
+                  cannot_buy:
+                    contract.goPlus.cannot_buy,
+                  cannot_sell_all:
+                    contract.goPlus
+                      .cannot_sell_all,
+                  buy_tax:
+                    contract.goPlus.buy_tax,
+                  sell_tax:
+                    contract.goPlus.sell_tax,
+                  holder_count:
+                    contract.goPlus.holder_count,
+                  total_supply:
+                    contract.goPlus.total_supply
+                }
+              : null
+          }
+        });
     } catch (error) {
       candidate.aiSkippedReason =
         "DeepSeek analysis failed: " +
-        (error instanceof Error ? error.message : String(error));
+        (error instanceof Error
+          ? error.message
+          : String(error));
     }
   }
 
-  candidates.sort((a, b) => b.screenScore - a.screenScore);
+  candidates.sort(
+    (a, b) =>
+      (b.severityScore ?? 0) -
+      (a.severityScore ?? 0)
+  );
 
-  const { jsonPath, markdownPath } = await writeReport(candidates, {
-    minTvl,
-    maxTvl,
-    limit,
-    aiLimit
-  });
+  const { jsonPath, markdownPath } =
+    await writeReport(candidates, {
+      minTvl,
+      maxTvl,
+      limit,
+      aiLimit,
+      aiMinSeverityScore
+    });
 
-  return { candidates, jsonPath, markdownPath };
+  return {
+    candidates,
+    jsonPath,
+    markdownPath
+  };
 }
