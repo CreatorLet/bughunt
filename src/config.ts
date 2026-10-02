@@ -17,13 +17,18 @@ function optionalNumber(name: string, fallback: number): number {
 export const config = {
   chainId: "56",
   chainName: "BSC",
+  dexScannerBaseUrl: process.env.DEXSCANNER_BASE_URL?.trim() || "https://dexscanner.io",
+  dexScannerEnabled: process.env.DEXSCANNER_ENABLED !== "false",
   deepSeekApiKey: process.env.DEEPSEEK_API_KEY?.trim() || "",
   etherscanApiKey: process.env.ETHERSCAN_API_KEY?.trim() || "",
   goPlusAppKey: process.env.GOPLUS_APP_KEY?.trim() || "",
   goPlusAppSecret: process.env.GOPLUS_APP_SECRET?.trim() || "",
   minTvl: optionalNumber("DEFAULT_MIN_TVL", 50000),
   maxTvl: optionalNumber("DEFAULT_MAX_TVL", 1000000),
-  protocolLimit: Math.max(1, Math.floor(optionalNumber("DEFAULT_PROTOCOL_LIMIT", 20)))
+  protocolLimit: Math.max(1, Math.floor(optionalNumber("DEFAULT_PROTOCOL_LIMIT", 20))),
+  defaultAiLimit: Math.max(0, Math.floor(optionalNumber("DEFAULT_AI_LIMIT", 3))),
+  aiMinSeverityScore: Math.max(0, Math.floor(optionalNumber("AI_MIN_SEVERITY_SCORE", 30))),
+  aiSourceChars: Math.max(12000, Math.floor(optionalNumber("AI_SOURCE_CHARS", 45000)))
 };
 
 export function requireDeepSeek(): string { return required("DEEPSEEK_API_KEY"); }
