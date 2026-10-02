@@ -147,6 +147,10 @@ async function discover(args: string[]): Promise<void> {
             item.source +
             ", score " +
             item.score +
+            (item.sources && item.sources.length > 1
+              ? ", corroborated by " +
+                item.sources.join("+")
+              : "") +
             "]" +
             (item.matchedName
               ? " " + item.matchedName
