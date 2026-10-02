@@ -1,9 +1,11 @@
 import { config } from "../config.js";
 import { runHeuristics } from "../analysis/heuristics.js";
 import { analyzeFunctionSurfaces } from "../analysis/surfaces.js";
+import { assessSeverity } from "../analysis/severity.js";
 import { analyzeWithDeepSeek } from "../analysis/deepseek.js";
 import { getAbi, getSourceCode } from "../providers/etherscan.js";
 import { getRugpullSignals, getTokenSecurity } from "../providers/goplus.js";
+import { getMarketContext } from "../providers/dexscanner.js";
 import type { ContractResearch } from "../types.js";
 
 function validateAddress(address: string): string {
@@ -54,6 +56,7 @@ export async function researchContract(
 
   if (config.goPlusAppKey && config.goPlusAppSecret) {
     const includeRugpull = options.includeRugpull ?? true;
+
     const securityResult = await getTokenSecurity(address)
       .then((value) => ({ value }))
       .catch((error: unknown) => ({
@@ -83,6 +86,20 @@ export async function researchContract(
     goPlusError = "GoPlus credentials are not configured.";
   }
 
+  let market: ContractResearch["market"];
+  try {
+    market = await getMarketContext(address);
+  } catch (error) {
+    market = {
+      provider: "dexscanner",
+      matched: false,
+      pairCount: 0,
+      warnings: [
+        error instanceof Error ? error.message : String(error)
+      ]
+    };
+  }
+
   const report: ContractResearch = {
     chainId: config.chainId,
     address,
@@ -95,6 +112,7 @@ export async function researchContract(
     rugpullSignals,
     goPlusError,
     rugpullError,
+    market,
     heuristics: heuristic.findings,
     heuristicScore: heuristic.score,
     functionNames: surfaces.functions,
@@ -102,15 +120,46 @@ export async function researchContract(
     surfaceScore: surfaces.score
   };
 
+  // Deterministic severity is computed before AI and remains the primary
+  // triage score. DeepSeek is a second-stage reviewer, not the score engine.
+  report.severity = assessSeverity(report);
+
   if (options.ai && source) {
     report.aiAnalysis = await analyzeWithDeepSeek({
       address,
       contractName: metadata?.ContractName,
       source,
       heuristicFindings: heuristic.findings,
+      maxSourceChars: config.aiSourceChars,
       context: {
         functionSurfaces: surfaces.surfaces,
         surfaceScore: surfaces.score,
+        severityScore: report.severity.score,
+        severityLevel: report.severity.level,
+        severityFactors: report.severity.factors,
+        market: market
+          ? {
+              matched: market.matched,
+              pairCount: market.pairCount,
+              pair: market.pair
+                ? {
+                    dexId: market.pair.dexId,
+                    pairAddress: market.pair.pairAddress,
+                    baseToken: market.pair.baseToken,
+                    quoteToken: market.pair.quoteToken,
+                    priceUsd: market.pair.priceUsd,
+                    priceChange24h: market.pair.priceChange?.h24,
+                    volume24h: market.pair.volume?.h24,
+                    liquidityUsd: market.pair.liquidity?.usd,
+                    buys24h: market.pair.txns?.h24?.buys,
+                    sells24h: market.pair.txns?.h24?.sells,
+                    fdv: market.pair.fdv,
+                    marketCap: market.pair.marketCap,
+                    pairCreatedAt: market.pair.pairCreatedAt
+                  }
+                : null
+            }
+          : null,
         goPlus: goPlus
           ? {
               is_open_source: goPlus.is_open_source,
@@ -140,8 +189,14 @@ export function summarizeContract(report: ContractResearch): string {
     "Chain: BSC (56)",
     "Contract: " + (report.contractName ?? "unknown"),
     "Source: " + (report.sourceVerified ? "verified" : "not verified"),
+    "Severity score: " + (report.severity?.score ?? 0) +
+      " (" + (report.severity?.level ?? "informational") + ")",
     "Heuristic score: " + report.heuristicScore,
     "Surface score: " + report.surfaceScore,
+    "DEX market: " +
+      (report.market?.matched
+        ? "matched " + String(report.market.pair?.baseToken?.symbol ?? "pair")
+        : "no indexed matching pair"),
     "Functions: " +
       (report.functionNames?.slice(0, 25).join(", ") || "not available")
   ];
@@ -160,7 +215,6 @@ export function summarizeContract(report: ContractResearch): string {
 
   if (report.heuristics.length) {
     lines.push("Heuristics:");
-
     for (const finding of report.heuristics) {
       lines.push(
         "  - [" +
@@ -170,6 +224,20 @@ export function summarizeContract(report: ContractResearch): string {
           " (" +
           finding.confidence +
           ")"
+      );
+    }
+  }
+
+  if (report.severity?.factors.length) {
+    lines.push("Severity factors:");
+    for (const factor of report.severity.factors.slice(0, 12)) {
+      lines.push(
+        "  - +" +
+          factor.points +
+          " [" +
+          factor.level.toUpperCase() +
+          "] " +
+          factor.reason
       );
     }
   }
