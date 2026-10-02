@@ -1,4 +1,5 @@
 import { config } from "../config.js";
+import { fetchWithTimeout } from "./http.js";
 import type {
   ContractAddressCandidate,
   ContractAddressRole,
@@ -97,7 +98,7 @@ async function search(query: string): Promise<string> {
   let response: Response;
 
   try {
-    response = await fetch(url, {
+    response = await fetchWithTimeout(url, {
       headers: {
         accept: "text/html,application/xhtml+xml",
         "user-agent": "Mozilla/5.0 (compatible; bughunt-researcher/1.0)"
