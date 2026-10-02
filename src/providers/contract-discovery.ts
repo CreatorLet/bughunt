@@ -4,6 +4,7 @@ import type {
   DefiLlamaProtocol
 } from "../types.js";
 import { getProtocol } from "./defillama.js";
+import { errorMessage, fetchWithTimeout } from "./http.js";
 import { discoverFromDexScreener } from "./dexscreener.js";
 import { discoverFromDexScanner } from "./dexscanner.js";
 import { discoverFromBscScan } from "./bscscan-search.js";
@@ -52,7 +53,7 @@ function rankingScore(item: ContractAddressCandidate): number {
 }
 
 async function getJson<T>(url: string): Promise<T> {
-  const response = await fetch(url, {
+  const response = await fetchWithTimeout(url, {
     headers: {
       accept: "application/vnd.github+json",
       "user-agent": "bughunt-researcher"
@@ -394,7 +395,7 @@ async function discoverFromGithub(
         if (!item.path) return [] as const;
 
         try {
-          const raw = await fetch(
+          const raw = await fetchWithTimeout(
             "https://raw.githubusercontent.com/" +
               repo.owner +
               "/" +
@@ -484,18 +485,18 @@ export async function discoverBscContractAddresses(
     }
   }
 
-  const independentSources =
+  const marketSources =
     await Promise.all([
       discoverFromDexScreener(protocol),
-      discoverFromDexScanner(protocol),
-      discoverFromBscScan(protocol)
+      discoverFromDexScanner(protocol)
     ]);
 
-  for (const group of independentSources) {
+  for (const group of marketSources) {
     candidates.push(...group);
   }
 
   let ranked = uniqueAddresses(candidates);
+
   const hasStrongCore = ranked.some(
     (item) =>
       (item.role === "core" ||
@@ -503,10 +504,24 @@ export async function discoverBscContractAddresses(
       item.score >= 85
   );
 
-  if (
-    !hasStrongCore &&
-    protocol.github
-  ) {
+  // BscScan web search is a slow/best-effort fallback. Never make it a
+  // mandatory call for every protocol when cheaper sources already resolved
+  // credible candidates.
+  if (!hasStrongCore && ranked.length === 0) {
+    candidates.push(
+      ...(await discoverFromBscScan(protocol))
+    );
+    ranked = uniqueAddresses(candidates);
+  }
+
+  const coreEstablished = ranked.some(
+    (item) =>
+      (item.role === "core" ||
+        item.role === "implementation") &&
+      item.score >= 85
+  );
+
+  if (!coreEstablished && protocol.github) {
     candidates.push(
       ...(await discoverFromGithub(protocol.github))
     );
