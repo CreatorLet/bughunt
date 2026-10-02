@@ -12,7 +12,11 @@ function hasFlag(args: string[], name: string): boolean {
   return args.includes(name);
 }
 
-function numberFlag(args: string[], name: string, fallback: number): number {
+function numberFlag(
+  args: string[],
+  name: string,
+  fallback: number
+): number {
   const value = parseFlag(args, name);
   if (!value) return fallback;
 
@@ -32,7 +36,7 @@ function printHelp(): void {
       "",
       "Main command:",
       "  npm run dev -- scan",
-      "  npm run dev -- scan --min-tvl 50000 --max-tvl 1000000 --limit 20 --ai-limit 5",
+      "  npm run dev -- scan --min-tvl 50000 --max-tvl 1000000 --limit 20 --ai-limit 3",
       "",
       "Manual inspection:",
       "  npm run dev -- discover --min-tvl 50000 --max-tvl 1000000 --limit 20",
@@ -43,7 +47,8 @@ function printHelp(): void {
       "Scan defaults:",
       "  BSC TVL: $50,000–$1,000,000",
       "  Protocols: 20",
-      "  DeepSeek analyses: same as protocol count by default",
+      "  DeepSeek analyses: top 3 elevated-severity contracts",
+      "  AI threshold: severity score 30/100",
       "  Concurrent contract screens: 4",
       "",
       "Environment:",
@@ -51,20 +56,39 @@ function printHelp(): void {
       "  ETHERSCAN_API_KEY",
       "  GOPLUS_APP_KEY",
       "  GOPLUS_APP_SECRET",
+      "  DEXSCANNER_ENABLED (optional, default true)",
+      "  DEXSCANNER_BASE_URL (optional)",
+      "  DEFAULT_AI_LIMIT (optional, default 3)",
+      "  AI_MIN_SEVERITY_SCORE (optional, default 30)",
+      "  AI_SOURCE_CHARS (optional, default 45000)",
       ""
     ].join("\n")
   );
 }
 
 async function discover(args: string[]): Promise<void> {
-  const minTvl = numberFlag(args, "--min-tvl", config.minTvl);
-  const maxTvl = numberFlag(args, "--max-tvl", config.maxTvl);
+  const minTvl = numberFlag(
+    args,
+    "--min-tvl",
+    config.minTvl
+  );
+  const maxTvl = numberFlag(
+    args,
+    "--max-tvl",
+    config.maxTvl
+  );
   const limit = Math.max(
     1,
-    Math.floor(numberFlag(args, "--limit", config.protocolLimit))
+    Math.floor(
+      numberFlag(args, "--limit", config.protocolLimit)
+    )
   );
 
-  const protocols = await listBscProtocols(minTvl, maxTvl, limit);
+  const protocols = await listBscProtocols(
+    minTvl,
+    maxTvl,
+    limit
+  );
 
   console.log(
     [
@@ -109,62 +133,133 @@ async function analyze(args: string[]): Promise<void> {
   const address = parseFlag(args, "--address");
 
   if (!address) {
-    throw new Error("Usage: npm run dev -- analyze --address 0x...");
+    throw new Error(
+      "Usage: npm run dev -- analyze --address 0x..."
+    );
   }
 
   const useAi = hasFlag(args, "--ai");
-  const report = await researchContract(address, { ai: useAi });
+  const report = await researchContract(address, {
+    ai: useAi
+  });
 
-  console.log("\n" + summarizeContract(report) + "\n");
+  console.log(
+    "\n" + summarizeContract(report) + "\n"
+  );
 
   console.log("GoPlus token security:");
-  console.log(JSON.stringify(report.goPlus ?? null, null, 2));
+  console.log(
+    JSON.stringify(report.goPlus ?? null, null, 2)
+  );
 
   if (report.goPlusError) {
-    console.log("GoPlus error: " + report.goPlusError);
+    console.log(
+      "GoPlus error: " + report.goPlusError
+    );
   }
 
   console.log("GoPlus rugpull signals:");
-  console.log(JSON.stringify(report.rugpullSignals ?? null, null, 2));
+  console.log(
+    JSON.stringify(
+      report.rugpullSignals ?? null,
+      null,
+      2
+    )
+  );
 
   if (report.rugpullError) {
-    console.log("GoPlus rugpull error: " + report.rugpullError);
+    console.log(
+      "GoPlus rugpull error: " + report.rugpullError
+    );
   }
+
+  console.log("DexScanner market:");
+  console.log(
+    JSON.stringify(report.market ?? null, null, 2)
+  );
+
+  console.log("Severity assessment:");
+  console.log(
+    JSON.stringify(report.severity ?? null, null, 2)
+  );
 
   if (report.aiAnalysis !== undefined) {
     console.log(
       "\nDeepSeek request ID: " +
-        (report.aiAnalysis.requestId ?? "not returned")
+        (report.aiAnalysis.requestId ??
+          "not returned")
     );
     console.log(
       "DeepSeek usage: " +
-        JSON.stringify(report.aiAnalysis.usage ?? null, null, 2)
+        JSON.stringify(
+          report.aiAnalysis.usage ?? null,
+          null,
+          2
+        )
     );
     console.log("\nDeepSeek analysis:");
-    console.log(JSON.stringify(report.aiAnalysis.result, null, 2));
+    console.log(
+      JSON.stringify(
+        report.aiAnalysis.result,
+        null,
+        2
+      )
+    );
   }
 }
 
 async function scan(args: string[]): Promise<void> {
-  const minTvl = numberFlag(args, "--min-tvl", config.minTvl);
-  const maxTvl = numberFlag(args, "--max-tvl", config.maxTvl);
+  const minTvl = numberFlag(
+    args,
+    "--min-tvl",
+    config.minTvl
+  );
+  const maxTvl = numberFlag(
+    args,
+    "--max-tvl",
+    config.maxTvl
+  );
   const limit = Math.max(
     1,
-    Math.floor(numberFlag(args, "--limit", 20))
+    Math.floor(
+      numberFlag(
+        args,
+        "--limit",
+        config.protocolLimit
+      )
+    )
   );
   const aiLimit = Math.max(
     0,
-    Math.floor(numberFlag(args, "--ai-limit", limit))
+    Math.floor(
+      numberFlag(
+        args,
+        "--ai-limit",
+        config.defaultAiLimit
+      )
+    )
+  );
+  const aiMinSeverityScore = Math.max(
+    0,
+    Math.floor(
+      numberFlag(
+        args,
+        "--ai-min-severity",
+        config.aiMinSeverityScore
+      )
+    )
   );
   const concurrency = Math.max(
     1,
-    Math.floor(numberFlag(args, "--concurrency", 4))
+    Math.floor(
+      numberFlag(args, "--concurrency", 4)
+    )
   );
 
   console.log("");
   console.log("Bughunt Researcher");
   console.log(
-    `BSC protocols: ${limit} | TVL: $${minTvl.toLocaleString()}–$${maxTvl.toLocaleString()} | AI: top ${aiLimit}`
+    `BSC protocols: ${limit} | TVL: $${minTvl.toLocaleString()}–$${maxTvl.toLocaleString()} | AI: top ${aiLimit} above severity ${aiMinSeverityScore}`
   );
   console.log("");
 
@@ -173,6 +268,7 @@ async function scan(args: string[]): Promise<void> {
     maxTvl,
     limit,
     aiLimit,
+    aiMinSeverityScore,
     concurrency
   });
 
@@ -181,26 +277,35 @@ async function scan(args: string[]): Promise<void> {
   );
   console.log("");
 
-  result.candidates.slice(0, limit).forEach((candidate, index) => {
-    const contract = candidate.contract;
-    const surfaceNames = (contract?.functionSurfaces ?? [])
-      .map((surface) => `${surface.name}[${surface.kind}]`)
-      .slice(0, 8);
+  result.candidates.slice(0, limit).forEach(
+    (candidate, index) => {
+      const contract = candidate.contract;
+      const surfaceNames = (
+        contract?.functionSurfaces ?? []
+      )
+        .map(
+          (surface) =>
+            `${surface.name}[${surface.kind}]`
+        )
+        .slice(0, 8);
 
-    console.log(
-      [
-        `${index + 1}. ${candidate.protocolName} — $${candidate.tvl.toLocaleString()}`,
-        `   Address: ${candidate.address ?? "not discovered"}`,
-        `   Score: ${candidate.screenScore}${candidate.aiSelected ? " | AI analyzed" : ""}`,
-        `   Surfaces: ${surfaceNames.length ? surfaceNames.join(", ") : "none"}`,
-        candidate.aiSkippedReason
-          ? `   Note: ${candidate.aiSkippedReason}`
-          : ""
-      ]
-        .filter(Boolean)
-        .join("\n")
-    );
-  });
+      console.log(
+        [
+          `${index + 1}. ${candidate.protocolName} — $${candidate.tvl.toLocaleString()}`,
+          `   Address: ${candidate.address ?? "not discovered"}`,
+          `   Severity: ${candidate.severityScore ?? 0}/100 (${candidate.severityLevel ?? "informational"})`,
+          `   Screen score: ${candidate.screenScore}${candidate.aiSelected ? " | AI analyzed" : ""}`,
+          `   DEX market: ${candidate.market?.matched ? "matched" : "not matched"}`,
+          `   Surfaces: ${surfaceNames.length ? surfaceNames.join(", ") : "none"}`,
+          candidate.aiSkippedReason
+            ? `   Note: ${candidate.aiSkippedReason}`
+            : ""
+        ]
+          .filter(Boolean)
+          .join("\n")
+      );
+    }
+  );
 
   console.log("");
   console.log("Reports:");
@@ -209,9 +314,14 @@ async function scan(args: string[]): Promise<void> {
 }
 
 async function main(): Promise<void> {
-  const [command, ...args] = process.argv.slice(2);
+  const [command, ...args] =
+    process.argv.slice(2);
 
-  if (!command || command === "help" || command === "--help") {
+  if (
+    !command ||
+    command === "help" ||
+    command === "--help"
+  ) {
     printHelp();
     return;
   }
@@ -228,7 +338,9 @@ async function main(): Promise<void> {
     const slug = args[0];
 
     if (!slug) {
-      throw new Error("Usage: npm run dev -- protocol <slug>");
+      throw new Error(
+        "Usage: npm run dev -- protocol <slug>"
+      );
     }
 
     return protocol(slug);
@@ -238,12 +350,17 @@ async function main(): Promise<void> {
     return analyze(args);
   }
 
-  throw new Error("Unknown command: " + command);
+  throw new Error(
+    "Unknown command: " + command
+  );
 }
 
 main().catch((error: unknown) => {
   console.error(
-    "\nError: " + (error instanceof Error ? error.message : String(error))
+    "\nError: " +
+      (error instanceof Error
+        ? error.message
+        : String(error))
   );
   process.exitCode = 1;
 });
