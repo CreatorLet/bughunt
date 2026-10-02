@@ -9,6 +9,77 @@ import { getMarketContext } from "../providers/dexscanner.js";
 import { getBestDexScreenerPair } from "../providers/dexscreener.js";
 import type { ContractResearch } from "../types.js";
 
+
+function normalizeSourceCode(raw: string): {
+  source: string;
+  quality: "full" | "standard-json" | "empty" | "unavailable";
+} {
+  if (!raw.trim()) {
+    return {
+      source: "",
+      quality: "unavailable"
+    };
+  }
+
+  const trimmed = raw.trim();
+  const standardJsonText =
+    trimmed.startsWith("{{") && trimmed.endsWith("}}")
+      ? trimmed.slice(1, -1)
+      : trimmed;
+
+  try {
+    const parsed = JSON.parse(standardJsonText) as {
+      sources?: Record<string, { content?: string }>;
+      language?: string;
+      settings?: unknown;
+    };
+
+    if (
+      parsed &&
+      typeof parsed === "object" &&
+      parsed.sources &&
+      typeof parsed.sources === "object"
+    ) {
+      const chunks: string[] = [];
+
+      for (const [file, entry] of Object.entries(parsed.sources)) {
+        const sourceText =
+          entry && typeof entry.content === "string"
+            ? entry.content
+            : "";
+
+        if (!sourceText.trim()) continue;
+
+        chunks.push(
+          "// ===== " +
+            file +
+            " =====\n" +
+            sourceText
+        );
+      }
+
+      if (!chunks.length) {
+        return {
+          source: "",
+          quality: "empty"
+        };
+      }
+
+      return {
+        source: chunks.join("\n\n"),
+        quality: "standard-json"
+      };
+    }
+  } catch {
+    // Ordinary Solidity source; keep it as-is.
+  }
+
+  return {
+    source: raw,
+    quality: "full"
+  };
+}
+
 function validateAddress(address: string): string {
   const normalized = address.trim();
 
@@ -42,7 +113,12 @@ export async function researchContract(
     abi = await getAbi(address);
   }
 
-  const source = metadata?.SourceCode ?? "";
+  const normalizedSource = normalizeSourceCode(
+    metadata?.SourceCode ?? ""
+  );
+  const source = normalizedSource.source;
+  const sourceQuality = normalizedSource.quality;
+
   const heuristic = source
     ? runHeuristics(source)
     : { findings: [], score: 0 };
@@ -123,6 +199,7 @@ export async function researchContract(
     chainId: config.chainId,
     address,
     sourceVerified: Boolean(source),
+    sourceQuality,
     contractName: metadata?.ContractName,
     sourceCode: source || undefined,
     abi,
@@ -143,7 +220,12 @@ export async function researchContract(
   // triage score. DeepSeek is a second-stage reviewer, not the score engine.
   report.severity = assessSeverity(report);
 
-  if (options.ai && source) {
+  if (
+    options.ai &&
+    source &&
+    sourceQuality !== "empty" &&
+    sourceQuality !== "unavailable"
+  ) {
     report.aiAnalysis = await analyzeWithDeepSeek({
       address,
       contractName: metadata?.ContractName,
@@ -207,7 +289,14 @@ export function summarizeContract(report: ContractResearch): string {
     "Address: " + report.address,
     "Chain: BSC (56)",
     "Contract: " + (report.contractName ?? "unknown"),
-    "Source: " + (report.sourceVerified ? "verified" : "not verified"),
+    "Source: " +
+      (report.sourceVerified
+        ? report.sourceQuality === "standard-json"
+          ? "verified (standard-json normalized)"
+          : "verified"
+        : report.sourceQuality === "empty"
+          ? "verified metadata, but source content is empty"
+          : "not verified"),
     "Severity score: " + (report.severity?.score ?? 0) +
       " (" + (report.severity?.level ?? "informational") + ")",
     "Heuristic score: " + report.heuristicScore,
