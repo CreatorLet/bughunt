@@ -1,3 +1,4 @@
+import { config } from "../config.js";
 import type {
   ContractAddressCandidate,
   ContractAddressRole,
@@ -114,6 +115,8 @@ async function search(query: string): Promise<string> {
 export async function discoverFromBscScan(
   protocol: DefiLlamaProtocol
 ): Promise<ContractAddressCandidate[]> {
+  if (!config.bscScanSearchEnabled) return [];
+
   const terms = termsFor(protocol);
   if (!terms.length) return [];
 
