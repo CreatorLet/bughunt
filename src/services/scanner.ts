@@ -701,10 +701,22 @@ export async function runBscScan(
     )
   );
 
+  const resolvedForReport = processedCandidates.filter(
+    (candidate) => Boolean(candidate.contract)
+  );
+  const unresolvedForReport = processedCandidates.filter(
+    (candidate) => !candidate.contract
+  );
+
+  const selectedForReport = [
+    ...unresolvedForReport,
+    ...resolvedForReport.slice(0, limit)
+  ];
+
   candidates.splice(
     0,
     candidates.length,
-    ...processedCandidates
+    ...selectedForReport
   );
 
   const sortedForAi = candidates
