@@ -97,12 +97,14 @@ export async function listBscProtocols(
     });
   }
 
-  return candidates
-    .sort(
-      (a, b) =>
-        Number(b.tvl ?? 0) - Number(a.tvl ?? 0)
-    )
-    .slice(0, limit > 0 ? undefined : 0);
+  const sorted = candidates.sort(
+    (a, b) =>
+      Number(b.tvl ?? 0) - Number(a.tvl ?? 0)
+  );
+
+  return limit > 0
+    ? sorted.slice(0, limit)
+    : sorted;
 }
 
 export async function getProtocol(
