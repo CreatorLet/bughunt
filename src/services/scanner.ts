@@ -695,6 +695,18 @@ export async function runBscScan(
     }
   }
 
+  const processedCandidates = candidates.filter((candidate) =>
+    processed.has(
+      candidate.protocolName + "|" + candidate.slug
+    )
+  );
+
+  candidates.splice(
+    0,
+    candidates.length,
+    ...processedCandidates
+  );
+
   const sortedForAi = candidates
     .filter(
       (candidate) =>
