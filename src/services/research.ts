@@ -80,6 +80,39 @@ function normalizeSourceCode(raw: string): {
   };
 }
 
+function looksLikeToken(
+  abi: unknown,
+  contractName?: string
+): boolean {
+  const names = new Set<string>();
+
+  if (Array.isArray(abi)) {
+    for (const item of abi) {
+      if (!item || typeof item !== "object") continue;
+      const record = item as Record<string, unknown>;
+      if (record.type === "function" && typeof record.name === "string") {
+        names.add(record.name);
+      }
+    }
+  }
+
+  const tokenFunctionCount = [
+    "balanceOf",
+    "totalSupply",
+    "transfer",
+    "transferFrom",
+    "approve",
+    "allowance"
+  ].filter((name) => names.has(name)).length;
+
+  if (tokenFunctionCount >= 4) return true;
+
+  return typeof contractName === "string" &&
+    /(token|erc20|erc721|erc1155|coin|stable|wrapped)/i.test(
+      contractName
+    );
+}
+
 function validateAddress(address: string): string {
   const normalized = address.trim();
 
@@ -132,32 +165,42 @@ export async function researchContract(
   let rugpullError: string | undefined;
 
   if (config.goPlusAppKey && config.goPlusAppSecret) {
-    const includeRugpull = options.includeRugpull ?? true;
+    const looksToken = looksLikeToken(
+      abi,
+      metadata?.ContractName
+    );
 
-    const securityResult = await getTokenSecurity(address)
-      .then((value) => ({ value }))
-      .catch((error: unknown) => ({
-        error: error instanceof Error ? error.message : String(error)
-      }));
-
-    const rugpullResult = includeRugpull
-      ? await getRugpullSignals(address)
-          .then((value) => ({ value }))
-          .catch((error: unknown) => ({
-            error: error instanceof Error ? error.message : String(error)
-          }))
-      : ({ value: null } as const);
-
-    if ("value" in securityResult) {
-      goPlus = securityResult.value;
+    if (!looksToken) {
+      goPlusError =
+        "GoPlus skipped: contract ABI/metadata does not look like a token.";
     } else {
-      goPlusError = securityResult.error;
-    }
+      const includeRugpull = options.includeRugpull ?? true;
 
-    if ("value" in rugpullResult) {
-      rugpullSignals = rugpullResult.value;
-    } else {
-      rugpullError = rugpullResult.error;
+      const securityResult = await getTokenSecurity(address)
+        .then((value) => ({ value }))
+        .catch((error: unknown) => ({
+          error: error instanceof Error ? error.message : String(error)
+        }));
+
+      const rugpullResult = includeRugpull
+        ? await getRugpullSignals(address)
+            .then((value) => ({ value }))
+            .catch((error: unknown) => ({
+              error: error instanceof Error ? error.message : String(error)
+            }))
+        : ({ value: null } as const);
+
+      if ("value" in securityResult) {
+        goPlus = securityResult.value;
+      } else {
+        goPlusError = securityResult.error;
+      }
+
+      if ("value" in rugpullResult) {
+        rugpullSignals = rugpullResult.value;
+      } else {
+        rugpullError = rugpullResult.error;
+      }
     }
   } else {
     goPlusError = "GoPlus credentials are not configured.";
