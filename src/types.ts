@@ -13,7 +13,7 @@ export interface DefiLlamaProtocol {
   audit_note?: string;
   audit_links?: string[];
   url?: string;
-  github?: string;
+  github?: unknown;
   [key: string]: unknown;
 }
 
@@ -24,7 +24,8 @@ export type ContractAddressSource =
   | "website"
   | "dexscreener"
   | "dexscanner"
-  | "bscscan";
+  | "bscscan"
+  | "etherscan-graph";
 
 export type ContractAddressRole =
   | "core"
@@ -43,6 +44,7 @@ export interface ContractAddressCandidate {
   file?: string;
   matchedName?: string;
   sources?: ContractAddressSource[];
+  relation?: "seed" | "implementation" | "internal-call" | "token-transfer" | "created-contract" | "interaction";
 }
 
 export interface DexScannerPair {
