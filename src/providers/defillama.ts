@@ -102,7 +102,7 @@ export async function listBscProtocols(
       (a, b) =>
         Number(b.tvl ?? 0) - Number(a.tvl ?? 0)
     )
-    .slice(0, limit);
+    .slice(0, limit > 0 ? undefined : 0);
 }
 
 export async function getProtocol(
