@@ -201,6 +201,27 @@ export function normalizeSourceCode(
   };
 }
 
+function hasImplementationGetter(
+  abi: unknown
+): boolean {
+  if (!Array.isArray(abi)) return false;
+
+  return abi.some((item) => {
+    if (!item || typeof item !== "object") {
+      return false;
+    }
+
+    const record =
+      item as Record<string, unknown>;
+
+    return (
+      record.type === "function" &&
+      record.name === "implementation" &&
+      Array.isArray(record.outputs)
+    );
+  });
+}
+
 function looksLikeToken(
   abi: unknown,
   contractName?: string
@@ -273,7 +294,15 @@ export async function researchContract(
 
   let source = normalizedSource.source;
   let sourceQuality = normalizedSource.quality;
-  let sourceFiles = normalizedSource.files;
+  let sourceFiles =
+    normalizedSource.files.length
+      ? normalizedSource.files
+      : source
+        ? [
+            metadata?.ContractFileName ??
+              "contract.sol"
+          ]
+        : [];
   let contractNames = normalizedSource.contractNames;
   let implementationAddress: string | undefined;
   let implementationContractName: string | undefined;
@@ -291,13 +320,23 @@ export async function researchContract(
     implementationAddress =
       metadata.Implementation.trim();
   } else {
-    try {
-      implementationAddress =
-        await resolveProxyImplementation(
-          address
-        );
-    } catch {
-      implementationAddress = undefined;
+    const proxyHint =
+      metadata?.Proxy === "1" ||
+      hasImplementationGetter(abi) ||
+      /proxy|delegator|unitroller|beacon|diamond/i.test(
+        metadata?.ContractName ?? ""
+      );
+
+    if (proxyHint) {
+      try {
+        implementationAddress =
+          await resolveProxyImplementation(
+            address
+          );
+      } catch {
+        implementationAddress =
+          undefined;
+      }
     }
   }
 
