@@ -5,6 +5,7 @@ import {
   getAbi,
   getSourceCode
 } from "./providers/etherscan.js";
+import { resolveProxyImplementation } from "./providers/rpc.js";
 import { getProtocol, listBscProtocols } from "./providers/defillama.js";
 import {
   normalizeSourceCode,
@@ -303,6 +304,11 @@ async function inspect(args: string[]): Promise<void> {
       sourceInfo.files.length
   );
 
+  console.log(
+    "Source characters: " +
+      sourceInfo.source.length
+  );
+
   if (sourceInfo.files.length) {
     sourceInfo.files.forEach(
       (file, index) =>
@@ -336,18 +342,45 @@ async function inspect(args: string[]): Promise<void> {
         : 0)
   );
 
+  let implementationAddress =
+    metadata.Implementation;
+
   if (
-    metadata.Implementation &&
-    /^0x[a-fA-F0-9]{40}$/.test(
-      metadata.Implementation
+    !implementationAddress ||
+    !/^0x[a-fA-F0-9]{40}$/.test(
+      implementationAddress
     )
+  ) {
+    try {
+      implementationAddress =
+        await resolveProxyImplementation(
+          address
+        );
+    } catch {
+      implementationAddress =
+        undefined;
+    }
+  }
+
+  if (
+    implementationAddress &&
+    /^0x[a-fA-F0-9]{40}$/.test(
+      implementationAddress
+    ) &&
+    implementationAddress.toLowerCase() !==
+      address.toLowerCase()
   ) {
     console.log(
       "\n[Inspect] Fetching implementation source/ABI..."
     );
 
+    console.log(
+      "Resolved implementation: " +
+        implementationAddress
+    );
+
     const impl = await getSourceCode(
-      metadata.Implementation
+      implementationAddress
     );
 
     if (impl) {
