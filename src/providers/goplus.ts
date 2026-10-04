@@ -2,8 +2,20 @@ import { GoPlus } from "@goplus/sdk-node";
 import { config, requireGoPlusAppKey, requireGoPlusAppSecret } from "../config.js";
 import type { GoPlusTokenSecurity } from "../types.js";
 
+const MIN_REQUEST_GAP_MS = 2_100;
+let nextRequestAt = 0;
 let configured = false;
 let authenticatedUntil = 0;
+
+async function waitForRateSlot(): Promise<void> {
+  const now = Date.now();
+  const slot = Math.max(now, nextRequestAt);
+  nextRequestAt = slot + MIN_REQUEST_GAP_MS;
+  const delay = slot - now;
+  if (delay > 0) {
+    await new Promise((resolve) => setTimeout(resolve, delay));
+  }
+}
 
 function ensureConfigured(): void {
   if (configured) return;
@@ -21,6 +33,7 @@ async function ensureAccessToken(): Promise<void> {
 
   if (Date.now() < authenticatedUntil) return;
 
+  await waitForRateSlot();
   const result = await GoPlus.getAccessToken();
 
   if (!result?.result?.access_token) {
@@ -43,6 +56,7 @@ export async function getTokenSecurity(
 ): Promise<GoPlusTokenSecurity | null> {
   await ensureAccessToken();
 
+  await waitForRateSlot();
   const data = await GoPlus.tokenSecurity(config.chainId, [address]);
 
   if (data?.code !== 1 && data?.code !== 2) {
@@ -72,6 +86,7 @@ export async function getRugpullSignals(
 ): Promise<Record<string, unknown> | null> {
   await ensureAccessToken();
 
+  await waitForRateSlot();
   const data = await GoPlus.rugpullDetection(
     config.chainId,
     address
