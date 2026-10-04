@@ -701,17 +701,21 @@ export async function runBscScan(
     )
   );
 
-  const resolvedForReport = processedCandidates.filter(
-    (candidate) => Boolean(candidate.contract)
-  );
-  const unresolvedForReport = processedCandidates.filter(
-    (candidate) => !candidate.contract
-  );
+  const selectedForReport: ScanCandidate[] = [];
+  let selectedResolvedCount = 0;
 
-  const selectedForReport = [
-    ...unresolvedForReport,
-    ...resolvedForReport.slice(0, limit)
-  ];
+  for (const candidate of processedCandidates) {
+    if (
+      candidate.contract ||
+      selectedResolvedCount < limit
+    ) {
+      selectedForReport.push(candidate);
+
+      if (candidate.contract) {
+        selectedResolvedCount += 1;
+      }
+    }
+  }
 
   candidates.splice(
     0,
