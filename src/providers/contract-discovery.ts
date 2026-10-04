@@ -8,6 +8,7 @@ import { errorMessage, fetchWithTimeout } from "./http.js";
 import { discoverFromDexScreener } from "./dexscreener.js";
 import { discoverFromDexScanner } from "./dexscanner.js";
 import { discoverFromBscScan } from "./bscscan-search.js";
+import { expandAddressGraph } from "./etherscan.js";
 
 const ADDRESS_RE = /0x[a-fA-F0-9]{40}/g;
 const GITHUB_API = "https://api.github.com";
@@ -415,141 +416,122 @@ async function discoverFromWebsite(
   }
 }
 
+function githubValues(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) {
+    return value.flatMap(githubValues);
+  }
+  if (value && typeof value === "object") {
+    const record = value as Record<string, unknown>;
+    return [
+      ...githubValues(record.url),
+      ...githubValues(record.github),
+      ...githubValues(record.repository)
+    ];
+  }
+  return [];
+}
+
 async function discoverFromGithub(
   github?: unknown
 ): Promise<ContractAddressCandidate[]> {
-  const repo = extractRepo(github);
-  if (!repo) return [];
+  const repos = [...new Set(githubValues(github).flatMap((value) => {
+    const repo = extractRepo(value);
+    return repo ? [repo] : [];
+  }).map((repo) => repo.owner + "/" + repo.repo))];
 
-  try {
-    const metadata = await getJson<GithubRepo>(
-      GITHUB_API +
-        "/repos/" +
-        encodeURIComponent(repo.owner) +
-        "/" +
-        encodeURIComponent(repo.repo)
-    );
+  if (!repos.length) return [];
 
-    const branch = metadata.default_branch ?? "main";
+  const allCandidates: ContractAddressCandidate[] = [];
 
-    const tree = await getJson<{
-      tree?: GithubTreeItem[];
-    }>(
-      GITHUB_API +
-        "/repos/" +
-        encodeURIComponent(repo.owner) +
-        "/" +
-        encodeURIComponent(repo.repo) +
-        "/git/trees/" +
-        encodeURIComponent(branch) +
-        "?recursive=1"
-    );
+  for (const repoId of repos.slice(0, 4)) {
+    const [owner, repo] = repoId.split("/");
+    if (!owner || !repo) continue;
 
-    const files = (tree.tree ?? [])
-      .filter(
-        (item) =>
-          item.type === "blob" &&
-          typeof item.path === "string"
-      )
-      .filter(
-        (item) =>
-          !/(node_modules|vendor|cache|artifact|build|dist)/i.test(
-            item.path as string
-          )
-      )
-      .filter((item) =>
-        /\.(sol|md|json|ts|js|yaml|yml)$/i.test(
-          item.path as string
+    try {
+      const metadata = await getJson<GithubRepo>(
+        GITHUB_API +
+          "/repos/" +
+          encodeURIComponent(owner) +
+          "/" +
+          encodeURIComponent(repo)
+      );
+
+      const branch = metadata.default_branch ?? "main";
+      const tree = await getJson<{ tree?: GithubTreeItem[] }>(
+        GITHUB_API +
+          "/repos/" +
+          encodeURIComponent(owner) +
+          "/" +
+          encodeURIComponent(repo) +
+          "/git/trees/" +
+          encodeURIComponent(branch) +
+          "?recursive=1"
+      );
+
+      const files = (tree.tree ?? [])
+        .filter((item) => item.type === "blob" && typeof item.path === "string")
+        .filter((item) => !/(node_modules|vendor|cache|artifact|build|dist)/i.test(item.path as string))
+        .filter((item) => /\.(sol|md|json|ts|js|yaml|yml)$/i.test(item.path as string))
+        .sort((a, b) =>
+          Number(/deploy|deployment|address|config|router|factory|vault|pool|masterchef|staking/i.test(b.path as string)) -
+          Number(/deploy|deployment|address|config|router|factory|vault|pool|masterchef|staking/i.test(a.path as string))
         )
-      )
-      .sort(
-        (a, b) =>
-          Number(
-            /deploy|deployment|address|config|router|factory|vault|pool|masterchef|staking/i.test(
-              b.path as string
-            )
-          ) -
-          Number(
-            /deploy|deployment|address|config|router|factory|vault|pool|masterchef|staking/i.test(
-              a.path as string
-            )
-          )
-      )
-      .slice(0, 8);
+        .slice(0, 25);
 
-    const responses = await Promise.all(
-      files.map(async (item) => {
-        if (!item.path) return [] as const;
-
-        try {
-          const raw = await fetchWithTimeout(
-            "https://raw.githubusercontent.com/" +
-              repo.owner +
-              "/" +
-              repo.repo +
-              "/" +
-              branch +
-              "/" +
-              item.path
-                .split("/")
-                .map(encodeURIComponent)
-                .join("/"),
-            {
-              headers: {
-                accept: "text/plain",
-                "user-agent": "bughunt-researcher"
+      const responses = await Promise.all(
+        files.map(async (item) => {
+          if (!item.path) return [] as const;
+          try {
+            const raw = await fetchWithTimeout(
+              "https://raw.githubusercontent.com/" +
+                owner + "/" + repo + "/" + branch + "/" +
+                item.path.split("/").map(encodeURIComponent).join("/"),
+              {
+                headers: {
+                  accept: "text/plain",
+                  "user-agent": "bughunt-researcher"
+                }
               }
-            }
+            );
+            if (!raw.ok) return [] as const;
+            return [item.path, (await raw.text()).slice(0, 180000)] as const;
+          } catch {
+            return [] as const;
+          }
+        })
+      );
+
+      for (const entry of responses) {
+        const file = entry[0];
+        const text = entry[1];
+        if (!file || !text) continue;
+
+        for (const match of text.matchAll(ADDRESS_RE)) {
+          const offset = match.index ?? 0;
+          const context = text.slice(
+            Math.max(0, offset - 260),
+            Math.min(text.length, offset + 500)
           );
+          const score = githubFileScore(file, context);
+          if (score < 55) continue;
 
-          if (!raw.ok) return [] as const;
-
-          return [
-            item.path,
-            (await raw.text()).slice(0, 120000)
-          ] as const;
-        } catch {
-          return [] as const;
+          allCandidates.push({
+            address: match[0],
+            source: "github",
+            role: roleFromContext(file + " " + context),
+            score,
+            file: repoId + ":" + file,
+            evidence: context
+          });
         }
-      })
-    );
-
-    const candidates: ContractAddressCandidate[] = [];
-
-    for (const entry of responses) {
-      const file = entry[0];
-      const text = entry[1];
-      if (!file || !text) continue;
-
-      for (const match of text.matchAll(ADDRESS_RE)) {
-        const offset = match.index ?? 0;
-        const context = text.slice(
-          Math.max(0, offset - 220),
-          Math.min(text.length, offset + 360)
-        );
-
-        const score = githubFileScore(
-          file,
-          context
-        );
-
-        if (score < 55) continue;
-
-        candidates.push({
-          address: match[0],
-          source: "github",
-          role: roleFromContext(file + " " + context),
-          score,
-          file,
-          evidence: context
-        });
       }
+    } catch {
+      // Continue to other repository mirrors.
     }
-
-    return uniqueAddresses(candidates).slice(0, 10);
-  } catch {
-    return [];
   }
+
+  return uniqueAddresses(allCandidates).slice(0, 16);
 }
 
 export async function discoverBscContractAddresses(
@@ -584,6 +566,42 @@ export async function discoverBscContractAddresses(
   }
 
   let ranked = uniqueAddresses(candidates);
+
+  const graphSeeds = ranked
+    .filter((item) => item.role !== "token" && item.score >= 65)
+    .slice(0, 2);
+
+  if (graphSeeds.length) {
+    const graphGroups = await Promise.all(
+      graphSeeds.map((seed) =>
+        expandAddressGraph(seed.address, 12).catch(() => ({
+          candidates: []
+        }))
+      )
+    );
+
+    for (const group of graphGroups) {
+      for (const item of group.candidates) {
+        candidates.push({
+          address: item.address,
+          source: "etherscan-graph",
+          role:
+            item.relation === "internal-call"
+              ? "core"
+              : item.relation === "created-contract"
+                ? "core"
+                : item.relation === "token-transfer"
+                  ? "token"
+                  : "related",
+          score: item.score,
+          evidence: item.evidence,
+          relation: item.relation
+        });
+      }
+    }
+
+    ranked = uniqueAddresses(candidates);
+  }
 
   const hasStrongCore = ranked.some(
     (item) =>
