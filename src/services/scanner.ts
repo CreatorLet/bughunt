@@ -16,16 +16,38 @@ import type {
 async function mapWithConcurrency<T, R>(
   items: T[],
   concurrency: number,
-  worker: (item: T, index: number) => Promise<R>
+  worker: (item: T, index: number) => Promise<R>,
+  options: {
+    stopAfterSuccess?: number;
+    isSuccess?: (result: R) => boolean;
+  } = {}
 ): Promise<R[]> {
   const results = new Array<R>(items.length);
   let cursor = 0;
+  let successCount = 0;
+  let stopped = false;
 
   async function runner(): Promise<void> {
     while (true) {
+      if (stopped) return;
+
       const index = cursor++;
       if (index >= items.length) return;
-      results[index] = await worker(items[index] as T, index);
+
+      const result = await worker(items[index] as T, index);
+      results[index] = result;
+
+      if (
+        options.stopAfterSuccess !== undefined &&
+        options.isSuccess &&
+        options.isSuccess(result)
+      ) {
+        successCount += 1;
+
+        if (successCount >= options.stopAfterSuccess) {
+          stopped = true;
+        }
+      }
     }
   }
 
@@ -40,7 +62,9 @@ async function mapWithConcurrency<T, R>(
   );
 
   await Promise.all(runners);
-  return results;
+  return results.filter(
+    (result): result is R => result !== undefined
+  );
 }
 
 function scoreCandidate(candidate: ScanCandidate): number {
@@ -467,7 +491,7 @@ export async function runBscScan(
   const protocols = await listBscProtocols(
     minTvl,
     maxTvl,
-    limit
+    0
   );
 
   const candidates: ScanCandidate[] =
@@ -647,6 +671,10 @@ export async function runBscScan(
 
       candidate.screenScore = scoreCandidate(candidate);
       return candidate;
+    },
+    {
+      stopAfterSuccess: limit,
+      isSuccess: (candidate) => Boolean(candidate.contract)
     }
   );
 
