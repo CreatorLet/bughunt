@@ -194,6 +194,7 @@ export async function researchContract(
   let implementationSourceQuality:
     | ContractResearch["implementationSourceQuality"]
     | undefined;
+  let implementationAbi: unknown = null;
 
   if (
     metadata?.Implementation &&
@@ -211,6 +212,27 @@ export async function researchContract(
         await getSourceCode(
           implementationAddress
         );
+
+      if (implementationMetadata?.ABI) {
+        try {
+          implementationAbi = JSON.parse(
+            implementationMetadata.ABI
+          );
+        } catch {
+          implementationAbi = null;
+        }
+      }
+
+      if (!implementationAbi) {
+        try {
+          implementationAbi =
+            await getAbi(
+              implementationAddress
+            );
+        } catch {
+          implementationAbi = null;
+        }
+      }
 
       const implementationSource =
         normalizeSourceCode(
@@ -257,21 +279,19 @@ export async function researchContract(
     : { findings: [], score: 0 };
 
   const combinedAbi = (() => {
-    if (!implementationAddress) return abi;
+    if (!implementationAbi) return abi;
 
-    try {
-      const implMetadata = metadata?.Implementation;
-      if (
-        !implMetadata ||
-        typeof implMetadata !== "string"
-      ) {
-        return abi;
-      }
-
-      return abi;
-    } catch {
-      return abi;
+    if (
+      Array.isArray(abi) &&
+      Array.isArray(implementationAbi)
+    ) {
+      return [
+        ...abi,
+        ...implementationAbi
+      ];
     }
+
+    return abi;
   })();
 
   const surfaces = analyzeFunctionSurfaces(
