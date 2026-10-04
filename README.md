@@ -10,6 +10,7 @@ It combines:
 - **DexScanner** for DEX market context and ranked BSC pair feeds
 - **DEX Screener** for documented name/symbol search and exact token-to-pair lookup
 - **BscScan public search** as a best-effort web-search fallback when contract names are not exposed elsewhere
+- **Etherscan V2 account/transaction graph expansion** from discovered seed addresses to surface related contracts, internal calls, created contracts, and token contracts
 - Local heuristics and function-surface detection for fast pre-screening
 - A deterministic **0–100 severity score** for ranking candidates before paid AI analysis
 - **DeepSeek V4.1-Flash** for focused second-stage code review
