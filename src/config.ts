@@ -17,6 +17,9 @@ function optionalNumber(name: string, fallback: number): number {
 export const config = {
   chainId: "56",
   chainName: "BSC",
+  bscRpcUrl:
+    process.env.BSC_RPC_URL?.trim() ||
+    "https://bsc-dataseed.bnbchain.org",
   dexScannerBaseUrl:
     process.env.DEXSCANNER_BASE_URL?.trim() ||
     "https://dexscanner.io",
