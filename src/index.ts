@@ -385,7 +385,7 @@ async function inspect(args: string[]): Promise<void> {
     );
 
     if (impl) {
-      const implSource = extractSourceFiles(
+      const implSource = normalizeSourceCode(
         impl.SourceCode ?? ""
       );
 
