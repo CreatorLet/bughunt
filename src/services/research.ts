@@ -267,6 +267,14 @@ export async function researchContract(
 
         implementationContractName =
           implementationMetadata?.ContractName;
+
+        if (
+          sourceQuality === "unavailable" ||
+          sourceQuality === "empty"
+        ) {
+          sourceQuality =
+            implementationSource.quality;
+        }
       }
     } catch {
       // Proxy metadata remains useful even when implementation source
