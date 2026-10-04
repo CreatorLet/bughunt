@@ -6,7 +6,11 @@ import {
   getSourceCode
 } from "./providers/etherscan.js";
 import { getProtocol, listBscProtocols } from "./providers/defillama.js";
-import { researchContract, summarizeContract } from "./services/research.js";
+import {
+  normalizeSourceCode,
+  researchContract,
+  summarizeContract
+} from "./services/research.js";
 import { runBscScan } from "./services/scanner.js";
 
 function parseFlag(args: string[], name: string): string | undefined {
@@ -18,82 +22,6 @@ function hasFlag(args: string[], name: string): boolean {
   return args.includes(name);
 }
 
-function extractSourceFiles(raw: string): {
-  quality: string;
-  files: string[];
-  contractNames: string[];
-} {
-  const trimmed = raw.trim();
-
-  if (!trimmed) {
-    return {
-      quality: "unavailable",
-      files: [],
-      contractNames: []
-    };
-  }
-
-  const standardJsonText =
-    trimmed.startsWith("{{") && trimmed.endsWith("}}")
-      ? trimmed.slice(1, -1)
-      : trimmed;
-
-  try {
-    const parsed = JSON.parse(
-      standardJsonText
-    ) as {
-      sources?: Record<string, { content?: string }>;
-    };
-
-    if (parsed.sources && typeof parsed.sources === "object") {
-      const files: string[] = [];
-      const names = new Set<string>();
-
-      for (const [file, entry] of Object.entries(
-        parsed.sources
-      )) {
-        const source =
-          typeof entry?.content === "string"
-            ? entry.content
-            : "";
-
-        if (!source.trim()) continue;
-
-        files.push(file);
-
-        for (const match of source.matchAll(
-          /(?:contract|interface|library|abstract\\s+contract)\\s+([A-Za-z_][A-Za-z0-9_]*)/g
-        )) {
-          if (match[1]) names.add(match[1]);
-        }
-      }
-
-      return {
-        quality: files.length
-          ? "standard-json"
-          : "empty",
-        files,
-        contractNames: [...names]
-      };
-    }
-  } catch {
-    // Plain Solidity source.
-  }
-
-  const names = new Set<string>();
-
-  for (const match of raw.matchAll(
-    /(?:contract|interface|library|abstract\\s+contract)\\s+([A-Za-z_][A-Za-z0-9_]*)/g
-  )) {
-    if (match[1]) names.add(match[1]);
-  }
-
-  return {
-    quality: "full",
-    files: [],
-    contractNames: [...names]
-  };
-}
 
 function numberFlag(
   args: string[],
@@ -342,7 +270,7 @@ async function inspect(args: string[]): Promise<void> {
     }
   }
 
-  const sourceInfo = extractSourceFiles(
+  const sourceInfo = normalizeSourceCode(
     metadata.SourceCode ?? ""
   );
 
@@ -364,6 +292,11 @@ async function inspect(args: string[]): Promise<void> {
   console.log(
     "Source quality: " +
       sourceInfo.quality
+  );
+
+  console.log(
+    "Source extraction error: " +
+      (sourceInfo.error ?? "none")
   );
   console.log(
     "Source files: " +
