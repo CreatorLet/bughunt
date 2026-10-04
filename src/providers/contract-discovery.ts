@@ -11,6 +11,52 @@ import { discoverFromBscScan } from "./bscscan-search.js";
 import { expandAddressGraph } from "./etherscan.js";
 
 const ADDRESS_RE = /0x[a-fA-F0-9]{40}/g;
+
+function explicitChainBefore(
+  value: string,
+  offset: number
+): string | undefined {
+  const prefix = value
+    .slice(Math.max(0, offset - 24), offset)
+    .toLowerCase();
+
+  const match = prefix.match(
+    /(?:^|[^a-z])(bsc|binance|bnb|ethereum|eth|solana|polygon|arbitrum|optimism):\s*$/
+  );
+
+  return match?.[1];
+}
+
+function isBscAddressContext(
+  value: string,
+  offset: number
+): boolean {
+  const chain = explicitChainBefore(value, offset);
+
+  if (
+    chain === "ethereum" ||
+    chain === "eth" ||
+    chain === "solana" ||
+    chain === "polygon" ||
+    chain === "arbitrum" ||
+    chain === "optimism"
+  ) {
+    return false;
+  }
+
+  if (chain === "bsc" || chain === "binance" || chain === "bnb") {
+    return true;
+  }
+
+  const context = value.slice(
+    Math.max(0, offset - 180),
+    Math.min(value.length, offset + 220)
+  );
+
+  return /\b(bsc|binance|bnb smart chain|chain.?id.{0,12}56)\b/i.test(
+    context
+  );
+}
 const GITHUB_API = "https://api.github.com";
 
 interface GithubRepo {
@@ -192,6 +238,28 @@ function rawProtocolAddresses(
   for (const match of value.matchAll(ADDRESS_RE)) {
     const address = match[0];
     const offset = match.index ?? 0;
+
+    const explicitChain = explicitChainBefore(
+      value,
+      offset
+    );
+
+    if (
+      explicitChain &&
+      !["bsc", "binance", "bnb"].includes(
+        explicitChain
+      )
+    ) {
+      continue;
+    }
+
+    if (
+      !explicitChain &&
+      !isBscAddressContext(value, offset)
+    ) {
+      continue;
+    }
+
     const context = value.slice(
       Math.max(0, offset - 80),
       Math.min(value.length, offset + 140)
@@ -230,6 +298,20 @@ function collectAddressStrings(
     if (!tokenLikePath) {
       for (const match of value.matchAll(ADDRESS_RE)) {
         const offset = match.index ?? 0;
+        const explicitChain = explicitChainBefore(
+          value,
+          offset
+        );
+
+        if (
+          explicitChain &&
+          !["bsc", "binance", "bnb"].includes(
+            explicitChain
+          )
+        ) {
+          continue;
+        }
+
         const context = value.slice(
           Math.max(0, offset - 180),
           Math.min(value.length, offset + 260)
@@ -375,6 +457,11 @@ async function discoverFromWebsite(
 
     for (const match of html.matchAll(ADDRESS_RE)) {
       const offset = match.index ?? 0;
+
+      if (!isBscAddressContext(html, offset)) {
+        continue;
+      }
+
       const context = html.slice(
         Math.max(0, offset - 260),
         Math.min(html.length, offset + 420)
