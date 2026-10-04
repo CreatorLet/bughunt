@@ -1,5 +1,10 @@
 import { config } from "./config.js";
 import { discoverBscContractAddresses } from "./providers/contract-discovery.js";
+import {
+  expandAddressGraph,
+  getAbi,
+  getSourceCode
+} from "./providers/etherscan.js";
 import { getProtocol, listBscProtocols } from "./providers/defillama.js";
 import { researchContract, summarizeContract } from "./services/research.js";
 import { runBscScan } from "./services/scanner.js";
@@ -11,6 +16,83 @@ function parseFlag(args: string[], name: string): string | undefined {
 
 function hasFlag(args: string[], name: string): boolean {
   return args.includes(name);
+}
+
+function extractSourceFiles(raw: string): {
+  quality: string;
+  files: string[];
+  contractNames: string[];
+} {
+  const trimmed = raw.trim();
+
+  if (!trimmed) {
+    return {
+      quality: "unavailable",
+      files: [],
+      contractNames: []
+    };
+  }
+
+  const standardJsonText =
+    trimmed.startsWith("{{") && trimmed.endsWith("}}")
+      ? trimmed.slice(1, -1)
+      : trimmed;
+
+  try {
+    const parsed = JSON.parse(
+      standardJsonText
+    ) as {
+      sources?: Record<string, { content?: string }>;
+    };
+
+    if (parsed.sources && typeof parsed.sources === "object") {
+      const files: string[] = [];
+      const names = new Set<string>();
+
+      for (const [file, entry] of Object.entries(
+        parsed.sources
+      )) {
+        const source =
+          typeof entry?.content === "string"
+            ? entry.content
+            : "";
+
+        if (!source.trim()) continue;
+
+        files.push(file);
+
+        for (const match of source.matchAll(
+          /(?:contract|interface|library|abstract\\s+contract)\\s+([A-Za-z_][A-Za-z0-9_]*)/g
+        )) {
+          if (match[1]) names.add(match[1]);
+        }
+      }
+
+      return {
+        quality: files.length
+          ? "standard-json"
+          : "empty",
+        files,
+        contractNames: [...names]
+      };
+    }
+  } catch {
+    // Plain Solidity source.
+  }
+
+  const names = new Set<string>();
+
+  for (const match of raw.matchAll(
+    /(?:contract|interface|library|abstract\\s+contract)\\s+([A-Za-z_][A-Za-z0-9_]*)/g
+  )) {
+    if (match[1]) names.add(match[1]);
+  }
+
+  return {
+    quality: "full",
+    files: [],
+    contractNames: [...names]
+  };
 }
 
 function numberFlag(
@@ -44,6 +126,8 @@ function printHelp(): void {
       "  npm run dev -- protocol <defillama-slug>",
       "  npm run dev -- analyze --address 0x...",
       "  npm run dev -- analyze --address 0x... --ai",
+      "  npm run dev -- inspect --address 0x...",
+      "  npm run dev -- inspect --address 0x... --graph",
       "",
       "Scan defaults:",
       "  BSC TVL: $50,000–$1,000,000",
@@ -226,6 +310,162 @@ async function discover(args: string[]): Promise<void> {
     lines.push("");
     console.log(lines.join("\n"));
   });
+}
+
+async function inspect(args: string[]): Promise<void> {
+  const address = parseFlag(args, "--address");
+
+  if (!address) {
+    throw new Error(
+      "Usage: npm run dev -- inspect --address 0x..."
+    );
+  }
+
+  console.log(
+    "[Inspect] Fetching Etherscan source/ABI..."
+  );
+
+  const metadata = await getSourceCode(address);
+
+  if (!metadata) {
+    console.log("No Etherscan contract metadata returned.");
+    return;
+  }
+
+  let abi: unknown = null;
+
+  if (metadata.ABI) {
+    try {
+      abi = JSON.parse(metadata.ABI);
+    } catch {
+      abi = metadata.ABI;
+    }
+  }
+
+  const sourceInfo = extractSourceFiles(
+    metadata.SourceCode ?? ""
+  );
+
+  console.log("");
+  console.log("Contract extraction");
+  console.log("Address: " + address);
+  console.log(
+    "Contract: " +
+      (metadata.ContractName ?? "unknown")
+  );
+  console.log(
+    "Proxy: " +
+      (metadata.Proxy ?? "0")
+  );
+  console.log(
+    "Implementation: " +
+      (metadata.Implementation ?? "none")
+  );
+  console.log(
+    "Source quality: " +
+      sourceInfo.quality
+  );
+  console.log(
+    "Source files: " +
+      sourceInfo.files.length
+  );
+
+  if (sourceInfo.files.length) {
+    sourceInfo.files.forEach(
+      (file, index) =>
+        console.log(
+          "  " + (index + 1) + ". " + file
+        )
+    );
+  }
+
+  console.log(
+    "Contract/interface/library declarations: " +
+      sourceInfo.contractNames.length
+  );
+
+  if (sourceInfo.contractNames.length) {
+    console.log(
+      "  " + sourceInfo.contractNames.join(", ")
+    );
+  }
+
+  console.log(
+    "ABI functions: " +
+      (Array.isArray(abi)
+        ? abi.filter(
+            (item) =>
+              item &&
+              typeof item === "object" &&
+              (item as Record<string, unknown>).type ===
+                "function"
+          ).length
+        : 0)
+  );
+
+  if (
+    metadata.Implementation &&
+    /^0x[a-fA-F0-9]{40}$/.test(
+      metadata.Implementation
+    )
+  ) {
+    console.log(
+      "\n[Inspect] Fetching implementation source/ABI..."
+    );
+
+    const impl = await getSourceCode(
+      metadata.Implementation
+    );
+
+    if (impl) {
+      const implSource = extractSourceFiles(
+        impl.SourceCode ?? ""
+      );
+
+      console.log(
+        "Implementation contract: " +
+          (impl.ContractName ?? "unknown")
+      );
+      console.log(
+        "Implementation source quality: " +
+          implSource.quality
+      );
+      console.log(
+        "Implementation source files: " +
+          implSource.files.length
+      );
+      console.log(
+        "Implementation declarations: " +
+          implSource.contractNames.length
+      );
+    }
+  }
+
+  if (hasFlag(args, "--graph")) {
+    console.log(
+      "\n[Inspect] Expanding Etherscan contract graph..."
+    );
+
+    const graph =
+      await expandAddressGraph(address, 20);
+
+    graph.candidates.forEach(
+      (item, index) => {
+        console.log(
+          "  " +
+            (index + 1) +
+            ". " +
+            item.address +
+            " [" +
+            item.relation +
+            ", score " +
+            item.score +
+            "] " +
+            item.evidence
+        );
+      }
+    );
+  }
 }
 
 async function protocol(slug: string): Promise<void> {
@@ -440,6 +680,10 @@ async function main(): Promise<void> {
 
   if (command === "discover") {
     return discover(args);
+  }
+
+  if (command === "inspect") {
+    return inspect(args);
   }
 
   if (command === "protocol") {
