@@ -4,35 +4,88 @@ import { analyzeFunctionSurfaces } from "../analysis/surfaces.js";
 import { assessSeverity } from "../analysis/severity.js";
 import { analyzeWithDeepSeek } from "../analysis/deepseek.js";
 import { getAbi, getSourceCode } from "../providers/etherscan.js";
+import { resolveProxyImplementation } from "../providers/rpc.js";
 import { getRugpullSignals, getTokenSecurity } from "../providers/goplus.js";
 import { getMarketContext } from "../providers/dexscanner.js";
 import { getBestDexScreenerPair } from "../providers/dexscreener.js";
 import type { ContractResearch } from "../types.js";
 
 
-function extractContractNames(source: string): string[] {
+export function extractContractNames(
+  source: string
+): string[] {
   const names = new Set<string>();
 
-  const patterns = [
-    /(?:contract|interface|library|abstract\\s+contract)\\s+([A-Za-z_][A-Za-z0-9_]*)/g,
-    /\\b(?:contract|interface|library)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+is\\b/g
-  ];
+  const pattern =
+    /\b(?:abstract\s+)?(?:contract|interface|library)\s+([A-Za-z_][A-Za-z0-9_]*)/g;
 
-  for (const pattern of patterns) {
-    for (const match of source.matchAll(pattern)) {
-      if (match[1]) names.add(match[1]);
-    }
+  for (const match of source.matchAll(pattern)) {
+    if (match[1]) names.add(match[1]);
   }
 
   return [...names];
 }
 
-function normalizeSourceCode(raw: string): {
+interface SourceExtraction {
   source: string;
-  quality: "full" | "standard-json" | "empty" | "unavailable";
+  quality:
+    | "full"
+    | "standard-json"
+    | "empty"
+    | "unavailable";
   files: string[];
   contractNames: string[];
-} {
+  error?: string;
+}
+
+function sourceEntries(
+  value: unknown
+): Array<[string, string]> {
+  if (!value || typeof value !== "object") {
+    return [];
+  }
+
+  const record =
+    value as Record<string, unknown>;
+
+  const sourceRoot =
+    record.sources &&
+    typeof record.sources === "object"
+      ? (record.sources as Record<string, unknown>)
+      : record;
+
+  const entries: Array<[string, string]> = [];
+
+  for (const [file, entry] of Object.entries(
+    sourceRoot
+  )) {
+    if (
+      entry &&
+      typeof entry === "object" &&
+      typeof (entry as Record<string, unknown>)
+        .content === "string"
+    ) {
+      entries.push([
+        file,
+        String(
+          (entry as Record<string, unknown>)
+            .content
+        )
+      ]);
+      continue;
+    }
+
+    if (typeof entry === "string") {
+      entries.push([file, entry]);
+    }
+  }
+
+  return entries;
+}
+
+export function normalizeSourceCode(
+  raw: string
+): SourceExtraction {
   if (!raw.trim()) {
     return {
       source: "",
@@ -42,76 +95,109 @@ function normalizeSourceCode(raw: string): {
     };
   }
 
-  const trimmed = raw.trim();
-  const standardJsonText =
-    trimmed.startsWith("{{") && trimmed.endsWith("}}")
-      ? trimmed.slice(1, -1)
-      : trimmed;
+  let trimmed = raw.trim();
+
+  // Etherscan-style multi-file payloads can be wrapped in
+  // an additional pair of braces: {{ ... }}.
+  if (
+    trimmed.startsWith("{{") &&
+    trimmed.endsWith("}}")
+  ) {
+    trimmed = trimmed.slice(1, -1);
+  }
+
+  // Some clients return a JSON-encoded string rather
+  // than the already-decoded SourceCode string.
+  if (
+    trimmed.startsWith('"') &&
+    trimmed.endsWith('"')
+  ) {
+    try {
+      const decoded = JSON.parse(trimmed);
+      if (typeof decoded === "string") {
+        trimmed = decoded.trim();
+      }
+    } catch {
+      // Keep the original value.
+    }
+  }
 
   try {
-    const parsed = JSON.parse(standardJsonText) as {
-      sources?: Record<string, { content?: string }>;
-      language?: string;
-      settings?: unknown;
-    };
+    const parsed = JSON.parse(trimmed);
+    const entries = sourceEntries(parsed);
 
-    if (
-      parsed &&
-      typeof parsed === "object" &&
-      parsed.sources &&
-      typeof parsed.sources === "object"
-    ) {
+    if (entries.length) {
       const chunks: string[] = [];
       const files: string[] = [];
       const contractNames = new Set<string>();
 
-      for (const [file, entry] of Object.entries(parsed.sources)) {
-        const sourceText =
-          entry && typeof entry.content === "string"
-            ? entry.content
-            : "";
-
+      for (const [file, sourceText] of entries) {
         if (!sourceText.trim()) continue;
 
         files.push(file);
 
-        for (const name of extractContractNames(sourceText)) {
+        for (
+          const name of extractContractNames(
+            sourceText
+          )
+        ) {
           contractNames.add(name);
         }
 
         chunks.push(
           "// ===== " +
             file +
-            " =====\\n" +
+            " =====\n" +
             sourceText
         );
       }
 
-      if (!chunks.length) {
+      if (chunks.length) {
         return {
-          source: "",
-          quality: "empty",
-          files: [],
-          contractNames: []
+          source: chunks.join("\n\n"),
+          quality: "standard-json",
+          files,
+          contractNames: [
+            ...contractNames
+          ]
         };
       }
-
-      return {
-        source: chunks.join("\n\n"),
-        quality: "standard-json",
-        files,
-        contractNames: [...contractNames]
-      };
     }
+
+    return {
+      source: "",
+      quality: "empty",
+      files: [],
+      contractNames: [],
+      error:
+        "Explorer returned JSON source metadata, but no source-file contents were found."
+    };
   } catch {
-    // Ordinary Solidity source; keep it as-is.
+    // Fall through to ordinary single-file Solidity.
+  }
+
+  // A JSON-looking fragment that failed to parse is not safe
+  // to send to the AI as if it were Solidity.
+  if (
+    trimmed.startsWith("{") &&
+    /"content"\s*:/.test(trimmed)
+  ) {
+    return {
+      source: "",
+      quality: "empty",
+      files: [],
+      contractNames: [],
+      error:
+        "Explorer source appears to be a truncated or malformed multi-file JSON payload."
+    };
   }
 
   return {
-    source: raw,
+    source: trimmed,
     quality: "full",
     files: [],
-    contractNames: extractContractNames(raw)
+    contractNames:
+      extractContractNames(trimmed)
   };
 }
 
@@ -196,17 +282,28 @@ export async function researchContract(
     | undefined;
   let implementationAbi: unknown = null;
 
-  if (
-    metadata?.Implementation &&
-    /^0x[a-fA-F0-9]{40}$/.test(
-      metadata.Implementation.trim()
-    ) &&
-    metadata.Implementation.toLowerCase() !==
-      address.toLowerCase()
-  ) {
+  if (metadata?.Implementation &&
+      /^0x[a-fA-F0-9]{40}$/.test(
+        metadata.Implementation.trim()
+      ) &&
+      metadata.Implementation.toLowerCase() !==
+        address.toLowerCase()) {
     implementationAddress =
       metadata.Implementation.trim();
+  } else {
+    try {
+      implementationAddress =
+        await resolveProxyImplementation(
+          address
+        );
+    } catch {
+      implementationAddress = undefined;
+    }
+  }
 
+  if (implementationAddress &&
+      implementationAddress.toLowerCase() !==
+        address.toLowerCase()) {
     try {
       const implementationMetadata =
         await getSourceCode(
@@ -398,6 +495,7 @@ export async function researchContract(
     implementationAddress,
     implementationContractName,
     implementationSourceQuality,
+    sourceError: normalizedSource.error,
     sourceCode: source || undefined,
     abi,
     metadata: metadata ?? undefined,
@@ -498,6 +596,8 @@ export function summarizeContract(report: ContractResearch): string {
       " contract/interface/library declaration(s)",
     "Implementation: " +
       (report.implementationAddress ?? "none detected"),
+    "Source extraction: " +
+      (report.sourceError ?? "ok"),
     "Source: " +
       (report.sourceVerified
         ? report.sourceQuality === "standard-json"
