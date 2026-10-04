@@ -146,14 +146,32 @@ async function discover(args: string[]): Promise<void> {
     (item) => item.addresses.length > 0
   ).length;
 
+  const output = [];
+  let printedResolved = 0;
+
+  for (const item of discovered) {
+    const hasAddress = item.addresses.length > 0;
+
+    if (!hasAddress || printedResolved < limit) {
+      output.push(item);
+
+      if (hasAddress) {
+        printedResolved += 1;
+      }
+    }
+  }
+
   console.log(
     "[Discovery] Final resolved targets: " +
-      resolvedCount +
+      Math.min(resolvedCount, limit) +
       "/" +
-      limit
+      limit +
+      " (found " +
+      resolvedCount +
+      " during search)"
   );
 
-  discovered.forEach(({ protocol: p, addresses }, i) => {
+  output.forEach(({ protocol: p, addresses }, i) => {
     const lines = [
       `${i + 1}. ${p.name ?? p.slug ?? "Unknown"}`,
       "   TVL: $" +
