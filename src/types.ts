@@ -225,6 +225,8 @@ export interface ContractResearch {
   implementationAddress?: string;
   implementationContractName?: string;
   implementationSourceQuality?: "full" | "standard-json" | "empty" | "unavailable";
+  sourceError?: string;
+  implementationSourceError?: string;
   sourceCode?: string;
   abi?: unknown;
   metadata?: EtherscanSourceRecord;
