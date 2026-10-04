@@ -84,19 +84,28 @@ function tokenMatchScore(
   let score = 0;
 
   for (const target of targets) {
+    const targetWords = target
+      .split(/\s+/)
+      .filter((word) => word.length >= 4);
+
+    if (
+      targetWords.some((word) => tokenName === word) ||
+      targetWords.some((word) => tokenName.includes(word))
+    ) {
+      score = Math.max(score, 82);
+    }
     const compactTarget = compact(target);
 
     if (compactTarget && compactTarget === compactName) {
       score = Math.max(score, 100);
     }
 
-    if (compactTarget && compactTarget === compactSymbol) {
-      // Very short symbols collide frequently (e.g. MGP). Treat them
-      // as weak identity evidence unless they are reasonably distinctive.
-      score = Math.max(
-        score,
-        compactTarget.length >= 4 ? 88 : 55
-      );
+    if (
+      compactTarget &&
+      compactTarget === compactSymbol &&
+      compactTarget.length >= 4
+    ) {
+      score = Math.max(score, 88);
     }
 
     if (tokenName && tokenName.includes(target)) score = Math.max(score, 80);
