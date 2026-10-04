@@ -67,6 +67,7 @@ function printHelp(): void {
       "",
       "Environment:",
       "  DEEPSEEK_API_KEY",
+      "  BSC_RPC_URL (optional, default official BSC RPC)",
       "  ETHERSCAN_API_KEY",
       "  GOPLUS_APP_KEY",
       "  GOPLUS_APP_SECRET",
