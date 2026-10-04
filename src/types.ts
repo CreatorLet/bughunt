@@ -220,6 +220,11 @@ export interface ContractResearch {
   sourceVerified: boolean;
   sourceQuality?: "full" | "standard-json" | "empty" | "unavailable";
   contractName?: string;
+  sourceFiles?: string[];
+  contractNames?: string[];
+  implementationAddress?: string;
+  implementationContractName?: string;
+  implementationSourceQuality?: "full" | "standard-json" | "empty" | "unavailable";
   sourceCode?: string;
   abi?: unknown;
   metadata?: EtherscanSourceRecord;
