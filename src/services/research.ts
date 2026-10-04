@@ -10,14 +10,35 @@ import { getBestDexScreenerPair } from "../providers/dexscreener.js";
 import type { ContractResearch } from "../types.js";
 
 
+function extractContractNames(source: string): string[] {
+  const names = new Set<string>();
+
+  const patterns = [
+    /(?:contract|interface|library|abstract\\s+contract)\\s+([A-Za-z_][A-Za-z0-9_]*)/g,
+    /\\b(?:contract|interface|library)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s+is\\b/g
+  ];
+
+  for (const pattern of patterns) {
+    for (const match of source.matchAll(pattern)) {
+      if (match[1]) names.add(match[1]);
+    }
+  }
+
+  return [...names];
+}
+
 function normalizeSourceCode(raw: string): {
   source: string;
   quality: "full" | "standard-json" | "empty" | "unavailable";
+  files: string[];
+  contractNames: string[];
 } {
   if (!raw.trim()) {
     return {
       source: "",
-      quality: "unavailable"
+      quality: "unavailable",
+      files: [],
+      contractNames: []
     };
   }
 
@@ -41,6 +62,8 @@ function normalizeSourceCode(raw: string): {
       typeof parsed.sources === "object"
     ) {
       const chunks: string[] = [];
+      const files: string[] = [];
+      const contractNames = new Set<string>();
 
       for (const [file, entry] of Object.entries(parsed.sources)) {
         const sourceText =
@@ -50,10 +73,16 @@ function normalizeSourceCode(raw: string): {
 
         if (!sourceText.trim()) continue;
 
+        files.push(file);
+
+        for (const name of extractContractNames(sourceText)) {
+          contractNames.add(name);
+        }
+
         chunks.push(
           "// ===== " +
             file +
-            " =====\n" +
+            " =====\\n" +
             sourceText
         );
       }
@@ -61,13 +90,17 @@ function normalizeSourceCode(raw: string): {
       if (!chunks.length) {
         return {
           source: "",
-          quality: "empty"
+          quality: "empty",
+          files: [],
+          contractNames: []
         };
       }
 
       return {
         source: chunks.join("\n\n"),
-        quality: "standard-json"
+        quality: "standard-json",
+        files,
+        contractNames: [...contractNames]
       };
     }
   } catch {
@@ -76,7 +109,9 @@ function normalizeSourceCode(raw: string): {
 
   return {
     source: raw,
-    quality: "full"
+    quality: "full",
+    files: [],
+    contractNames: extractContractNames(raw)
   };
 }
 
@@ -149,14 +184,100 @@ export async function researchContract(
   const normalizedSource = normalizeSourceCode(
     metadata?.SourceCode ?? ""
   );
-  const source = normalizedSource.source;
-  const sourceQuality = normalizedSource.quality;
+
+  let source = normalizedSource.source;
+  let sourceQuality = normalizedSource.quality;
+  let sourceFiles = normalizedSource.files;
+  let contractNames = normalizedSource.contractNames;
+  let implementationAddress: string | undefined;
+  let implementationContractName: string | undefined;
+  let implementationSourceQuality:
+    | ContractResearch["implementationSourceQuality"]
+    | undefined;
+
+  if (
+    metadata?.Implementation &&
+    /^0x[a-fA-F0-9]{40}$/.test(
+      metadata.Implementation.trim()
+    ) &&
+    metadata.Implementation.toLowerCase() !==
+      address.toLowerCase()
+  ) {
+    implementationAddress =
+      metadata.Implementation.trim();
+
+    try {
+      const implementationMetadata =
+        await getSourceCode(
+          implementationAddress
+        );
+
+      const implementationSource =
+        normalizeSourceCode(
+          implementationMetadata?.SourceCode ?? ""
+        );
+
+      implementationSourceQuality =
+        implementationSource.quality;
+
+      if (implementationSource.source) {
+        source =
+          source +
+          "\n\n// ===== PROXY IMPLEMENTATION " +
+          implementationAddress +
+          " =====\n" +
+          implementationSource.source;
+
+        sourceFiles = [
+          ...sourceFiles,
+          ...implementationSource.files.map(
+            (file) =>
+              "implementation:" + file
+          )
+        ];
+
+        contractNames = [
+          ...new Set([
+            ...contractNames,
+            ...implementationSource.contractNames
+          ])
+        ];
+
+        implementationContractName =
+          implementationMetadata?.ContractName;
+      }
+    } catch {
+      // Proxy metadata remains useful even when implementation source
+      // cannot be fetched or verified.
+    }
+  }
 
   const heuristic = source
     ? runHeuristics(source)
     : { findings: [], score: 0 };
 
-  const surfaces = analyzeFunctionSurfaces(source, abi);
+  const combinedAbi = (() => {
+    if (!implementationAddress) return abi;
+
+    try {
+      const implMetadata = metadata?.Implementation;
+      if (
+        !implMetadata ||
+        typeof implMetadata !== "string"
+      ) {
+        return abi;
+      }
+
+      return abi;
+    } catch {
+      return abi;
+    }
+  })();
+
+  const surfaces = analyzeFunctionSurfaces(
+    source,
+    combinedAbi
+  );
 
   let goPlus: ContractResearch["goPlus"] = null;
   let goPlusError: string | undefined;
@@ -244,6 +365,11 @@ export async function researchContract(
     sourceVerified: Boolean(source),
     sourceQuality,
     contractName: metadata?.ContractName,
+    sourceFiles,
+    contractNames,
+    implementationAddress,
+    implementationContractName,
+    implementationSourceQuality,
     sourceCode: source || undefined,
     abi,
     metadata: metadata ?? undefined,
@@ -278,6 +404,11 @@ export async function researchContract(
       context: {
         functionSurfaces: surfaces.surfaces,
         surfaceScore: surfaces.score,
+        implementationAddress: implementationAddress ?? null,
+        implementationContractName:
+          implementationContractName ?? null,
+        sourceFiles,
+        contractNames,
         severityScore: report.severity.score,
         severityLevel: report.severity.level,
         severityFactors: report.severity.factors,
@@ -332,6 +463,13 @@ export function summarizeContract(report: ContractResearch): string {
     "Address: " + report.address,
     "Chain: BSC (56)",
     "Contract: " + (report.contractName ?? "unknown"),
+    "Extracted source units: " +
+      String(report.sourceFiles?.length ?? 0) +
+      " file(s), " +
+      String(report.contractNames?.length ?? 0) +
+      " contract/interface/library declaration(s)",
+    "Implementation: " +
+      (report.implementationAddress ?? "none detected"),
     "Source: " +
       (report.sourceVerified
         ? report.sourceQuality === "standard-json"
