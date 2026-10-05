@@ -511,6 +511,11 @@ export async function researchContract(
     ? runHeuristics(source)
     : { findings: [], score: 0 };
 
+  const surfaces = analyzeFunctionSurfaces(
+    source,
+    combinedAbi
+  );
+
   const combinedAbi = (() => {
     if (!implementationAbi) return abi;
 
@@ -527,11 +532,6 @@ export async function researchContract(
     return abi;
   })();
 
-  const surfaces = analyzeFunctionSurfaces(
-    source,
-    combinedAbi
-  );
-
   let goPlus: ContractResearch["goPlus"] = null;
   let goPlusError: string | undefined;
 
@@ -540,8 +540,9 @@ export async function researchContract(
 
   if (config.goPlusAppKey && config.goPlusAppSecret) {
     const looksToken = looksLikeToken(
-      abi,
-      metadata?.ContractName
+      combinedAbi,
+      implementationContractName ??
+        metadata?.ContractName
     );
 
     if (!looksToken) {
@@ -625,7 +626,7 @@ export async function researchContract(
     implementationSourceQuality,
     sourceError: normalizedSource.error,
     sourceCode: source || undefined,
-    abi,
+    abi: combinedAbi,
     metadata: metadata ?? undefined,
     goPlus,
     rugpullSignals,
@@ -649,10 +650,86 @@ export async function researchContract(
     sourceQuality !== "empty" &&
     sourceQuality !== "unavailable"
   ) {
+    let sourceBundle = buildSourceBundle(
+      [
+        {
+          address,
+          contractName: metadata?.ContractName,
+          relation: "seed",
+          report
+        }
+      ],
+      1_200_000
+    );
+
+    try {
+      const graph = await expandAddressGraph(address, 12);
+      const relatedInputs = await Promise.all(
+        graph.candidates
+          .filter(
+            (item) =>
+              item.relation === "internal-call" ||
+              item.relation === "created-contract" ||
+              item.relation === "interaction"
+          )
+          .slice(0, 6)
+          .map(async (item) => {
+            const relatedMetadata = await getSourceCode(
+              item.address
+            );
+            const relatedSource =
+              normalizeSourceCode(
+                relatedMetadata?.SourceCode ?? ""
+              );
+
+            if (!relatedSource.source) return null;
+
+            return {
+              address: item.address,
+              contractName:
+                relatedMetadata?.ContractName,
+              relation: item.relation,
+              source: relatedSource.source,
+              sourceQuality:
+                relatedSource.quality,
+              sourceFiles:
+                relatedSource.files
+            };
+          })
+      );
+
+      sourceBundle = buildSourceBundle(
+        [
+          {
+            address,
+            contractName: metadata?.ContractName,
+            relation: "seed",
+            report
+          },
+          ...relatedInputs.filter(
+            (
+              item
+            ): item is NonNullable<typeof item> =>
+              Boolean(item)
+          )
+        ],
+        1_200_000
+      );
+    } catch {
+      // Graph enrichment is optional; the primary and implementation
+      // sources remain usable when it is unavailable.
+    }
+
+    if (sourceBundle) {
+      report.sourceBundle = sourceBundle;
+    }
+
     report.aiAnalysis = await analyzeWithDeepSeek({
       address,
       contractName: metadata?.ContractName,
-      source,
+      source:
+        report.sourceBundle?.source ??
+        source,
       heuristicFindings: heuristic.findings,
       maxSourceChars: config.aiSourceChars,
       context: {
@@ -663,6 +740,18 @@ export async function researchContract(
           implementationContractName ?? null,
         sourceFiles,
         contractNames,
+        sourceBundle: report.sourceBundle
+          ? {
+              sourceCharacters:
+                report.sourceBundle.sourceCharacters,
+              coverage:
+                report.sourceBundle.coverage,
+              contracts:
+                report.sourceBundle.contracts,
+              files:
+                report.sourceBundle.files
+            }
+          : null,
         severityScore: report.severity.score,
         severityLevel: report.severity.level,
         severityFactors: report.severity.factors,
