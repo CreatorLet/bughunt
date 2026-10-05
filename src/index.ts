@@ -152,7 +152,7 @@ async function discover(args: string[]): Promise<void> {
 
     if (!addresses.length) {
       lines.push(
-        "   Discovery: no address found after DeFiLlama detail, website, DEX Screener, DexScanner, BscScan, GitHub, and Etherscan graph discovery."
+        "   Discovery: no BSC address found after DeFiLlama address/detail/adapter, website, DEX Screener, DexScanner, BscScan, GitHub, and Etherscan graph discovery."
       );
     } else {
       addresses.slice(0, 8).forEach((item, index) => {
