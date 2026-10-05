@@ -282,6 +282,7 @@ export async function discoverFromDexScreener(
   }
 
   return [...candidateMap.values()]
+    .filter((item) => item.score >= 75)
     .sort((a, b) => b.score - a.score)
     .slice(0, 8);
 }
