@@ -9,17 +9,106 @@ import { getRugpullSignals, getTokenSecurity } from "../providers/goplus.js";
 import { getMarketContext } from "../providers/dexscanner.js";
 import { getBestDexScreenerPair } from "../providers/dexscreener.js";
 import type { ContractResearch } from "../types.js";
+import { expandAddressGraph } from "../providers/etherscan.js";
+import { buildSourceBundle } from "./source-bundle.js";
 
+
+function maskSolidityTrivia(source: string): string {
+  const out = source.split("");
+  let mode: "code" | "lineComment" | "blockComment" | "single" | "double" = "code";
+  let escaped = false;
+
+  for (let i = 0; i < source.length; i += 1) {
+    const c = source[i];
+    const n = source[i + 1];
+
+    if (mode === "lineComment") {
+      if (c === "\n" || c === "\r") {
+        mode = "code";
+      } else {
+        out[i] = " ";
+      }
+      continue;
+    }
+
+    if (mode === "blockComment") {
+      if (c === "*" && n === "/") {
+        out[i] = " ";
+        out[i + 1] = " ";
+        i += 1;
+        mode = "code";
+      } else if (c !== "\n" && c !== "\r") {
+        out[i] = " ";
+      }
+      continue;
+    }
+
+    if (mode === "single" || mode === "double") {
+      if (escaped) {
+        if (c !== "\n" && c !== "\r") out[i] = " ";
+        escaped = false;
+        continue;
+      }
+
+      if (c === "\\") {
+        out[i] = " ";
+        escaped = true;
+        continue;
+      }
+
+      if (
+        (mode === "single" && c === "'") ||
+        (mode === "double" && c === '"')
+      ) {
+        out[i] = " ";
+        mode = "code";
+        continue;
+      }
+
+      if (c !== "\n" && c !== "\r") out[i] = " ";
+      continue;
+    }
+
+    if (c === "/" && n === "/") {
+      out[i] = " ";
+      out[i + 1] = " ";
+      i += 1;
+      mode = "lineComment";
+      continue;
+    }
+
+    if (c === "/" && n === "*") {
+      out[i] = " ";
+      out[i + 1] = " ";
+      i += 1;
+      mode = "blockComment";
+      continue;
+    }
+
+    if (c === "'") {
+      out[i] = " ";
+      mode = "single";
+      continue;
+    }
+
+    if (c === '"') {
+      out[i] = " ";
+      mode = "double";
+    }
+  }
+
+  return out.join("");
+}
 
 export function extractContractNames(
   source: string
 ): string[] {
   const names = new Set<string>();
-
+  const masked = maskSolidityTrivia(source);
   const pattern =
     /\b(?:abstract\s+)?(?:contract|interface|library)\s+([A-Za-z_][A-Za-z0-9_]*)/g;
 
-  for (const match of source.matchAll(pattern)) {
+  for (const match of masked.matchAll(pattern)) {
     if (match[1]) names.add(match[1]);
   }
 
