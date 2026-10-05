@@ -106,7 +106,7 @@ Default behavior:
 - Keep thinking effort at `low`
 - Retry only when the first JSON response is actually unusable
 
-The configured default source budget is `45,000` characters. This can be changed with `AI_SOURCE_CHARS`.
+The configured default source budget is `45,000` characters. This can be changed with `AI_SOURCE_CHARS (optional, default 600000)
 
 DeepSeek currently documents `deepseek-flash` as DeepSeek-V4.1-Flash with a 1M-token context window. Its published pricing is substantially lower than the V4-Pro tier, so Bughunt keeps `deepseek-flash` for the paid review stage. citeturn751793search3turn751793search2
 
@@ -222,4 +222,4 @@ The severity score is a prioritization aid, not a formal audit result. DeepSeek 
 
 ## Next logical upgrades
 
-The scanner already discovers and ranks several protocol roles. The next major research layer is relationship-aware analysis: linking routers to factories, proxies to implementations, vaults to underlying assets, pools to oracles, and staking/governance contracts to the contracts they control.
+The scanner already discovers and ranks several protocol roles. Relationship-aware analysis is now part of the research pipeline: proxy implementations, related transaction contracts, and multiple verified source units can be assembled into a single AI review bundle.
