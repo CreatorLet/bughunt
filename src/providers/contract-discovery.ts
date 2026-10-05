@@ -377,6 +377,87 @@ function collectAddressStrings(
   }
 }
 
+function extractBalancedValue(
+  source: string,
+  start: number
+): string {
+  const first = source[start];
+  const pairs: Record<string, string> = {
+    "[": "]",
+    "{": "}",
+    "(": ")"
+  };
+
+  const closing = pairs[first];
+  if (!closing) return "";
+
+  let depth = 0;
+  let quote: string | null = null;
+  let escaped = false;
+
+  for (let index = start; index < source.length; index += 1) {
+    const char = source[index];
+
+    if (quote) {
+      if (escaped) {
+        escaped = false;
+      } else if (char === "\\") {
+        escaped = true;
+      } else if (char === quote) {
+        quote = null;
+      }
+      continue;
+    }
+
+    if (char === "'" || char === '"' || char === "`") {
+      quote = char;
+      continue;
+    }
+
+    if (char === first) {
+      depth += 1;
+      continue;
+    }
+
+    if (char === closing) {
+      depth -= 1;
+      if (depth === 0) {
+        return source.slice(start, index + 1);
+      }
+    }
+  }
+
+  return "";
+}
+
+function extractBscAdapterSection(
+  source: string
+): string {
+  const match = /\bbsc\s*:\s*/i.exec(source);
+  if (!match) return "";
+
+  const valueStart = match.index + match[0].length;
+  let cursor = valueStart;
+
+  while (
+    cursor < source.length &&
+    /\s/.test(source[cursor] ?? "")
+  ) {
+    cursor += 1;
+  }
+
+  const first = source[cursor];
+  if (first === "[" || first === "{" || first === "(") {
+    return extractBalancedValue(source, cursor);
+  }
+
+  const lineEnd = source.indexOf("\n", cursor);
+  return source.slice(
+    cursor,
+    lineEnd >= 0 ? lineEnd : source.length
+  );
+}
+
 async function discoverFromDefiLlamaAdapter(
   protocol: DefiLlamaProtocol
 ): Promise<ContractAddressCandidate[]> {
@@ -414,45 +495,25 @@ async function discoverFromDefiLlamaAdapter(
         500_000
       );
 
-      for (const match of source.matchAll(ADDRESS_RE)) {
-        const offset = match.index ?? 0;
+      const bscSection =
+        extractBscAdapterSection(source);
 
-        if (!isBscAddressContext(source, offset)) {
-          continue;
-        }
+      if (!bscSection) continue;
 
-        const context = source.slice(
-          Math.max(0, offset - 520),
-          Math.min(source.length, offset + 260)
-        );
-
-        const lower = context.toLowerCase();
-        const role = roleFromContext(
-          modulePath + " " + context
-        );
-
-        let score = 90;
-
-        if (/\bbsc\b/.test(lower)) score += 6;
-        if (
-          /(router|factory|vault|pool|gauge|masterchef|staking|proxy|implementation|registry)/.test(
-            lower
-          )
-        ) {
-          score += 4;
-        }
+      for (const match of bscSection.matchAll(ADDRESS_RE)) {
+        const address = match[0];
 
         candidates.push({
-          address: match[0],
+          address,
           source: "defillama-adapter",
-          role: role === "related" ? "core" : role,
-          score: Math.min(100, score),
+          role: "core",
+          score: 100,
           file: modulePath,
           evidence:
             "DeFiLlama adapter " +
             modulePath +
-            " BSC context: " +
-            context.replace(/\s+/g, " ").slice(0, 320)
+            " BSC deployment/config value: " +
+            bscSection.replace(/\s+/g, " ").slice(0, 320)
         });
       }
 
@@ -467,154 +528,6 @@ async function discoverFromDefiLlamaAdapter(
   return uniqueAddresses(candidates).slice(0, 12);
 }
 
-function githubFileScore(
-  file: string,
-  context: string
-): number {
-  const lowerFile = file.toLowerCase();
-  const lower = context.toLowerCase();
-  let score = 42;
-
-  if (/\b(bsc|binance|bnb)\b/.test(lower)) score += 32;
-  if (
-    /(router|factory|vault|pool|gauge|masterchef|staking|bridge|proxy|implementation|treasury|governance|timelock)/.test(
-      lower
-    )
-  ) {
-    score += 20;
-  }
-
-  if (
-    /(deploy|deployment|address|config|router|factory|vault|pool|masterchef|staking)/.test(
-      lowerFile
-    )
-  ) {
-    score += 16;
-  }
-
-  if (
-    /(router|factory|vault|pool|gauge|masterchef|staking|bridge)/.test(
-      lowerFile
-    )
-  ) {
-    score += 8;
-  }
-
-  if (
-    /(node_modules|vendor|cache|artifact|build|dist)/.test(
-      lowerFile
-    )
-  ) {
-    score -= 50;
-  }
-
-  if (/(mock|fixture)/.test(lowerFile)) score -= 16;
-  if (/(token|erc20|test)/.test(lowerFile)) score -= 6;
-
-  return Math.max(0, Math.min(100, score));
-}
-
-function relatedHosts(home: URL, links: string[]): string[] {
-  const root = home.hostname
-    .split(".")
-    .slice(-2)
-    .join(".");
-
-  const urls = new Set<string>();
-
-  for (const raw of links) {
-    try {
-      const target = new URL(raw, home);
-      if (!/^https?:$/.test(target.protocol)) continue;
-
-      const targetRoot = target.hostname
-        .split(".")
-        .slice(-2)
-        .join(".");
-
-      if (
-        target.hostname === home.hostname ||
-        targetRoot === root
-      ) {
-        target.hash = "";
-        urls.add(target.toString());
-      }
-    } catch {
-      // Ignore malformed links.
-    }
-  }
-
-  return [...urls];
-}
-
-function relevantLinkScore(url: string): number {
-  const lower = url.toLowerCase();
-  let score = 0;
-
-  if (/(contract|contracts|address|addresses|deployment|deploy|smart-contract|smartcontract|developer|developers)/.test(lower)) {
-    score += 40;
-  }
-
-  if (/(docs|documentation|docs\.|wiki)/.test(lower)) {
-    score += 30;
-  }
-
-  if (/(bsc|bnb|binance)/.test(lower)) {
-    score += 20;
-  }
-
-  if (/(github|gitbook)/.test(lower)) {
-    score += 10;
-  }
-
-  return score;
-}
-
-function extractLinks(html: string, base: URL): string[] {
-  const links: string[] = [];
-
-  for (const match of html.matchAll(
-    /href\s*=\s*["']([^"']+)["']/gi
-  )) {
-    if (!match[1]) continue;
-
-    try {
-      const target = new URL(match[1], base);
-      if (!/^https?:$/.test(target.protocol)) continue;
-      target.hash = "";
-      links.push(target.toString());
-    } catch {
-      // Ignore malformed links.
-    }
-  }
-
-  return [...new Set(links)];
-}
-
-async function fetchWebsitePage(
-  url: string
-): Promise<{ url: string; html: string } | null> {
-  try {
-    const response = await fetchWithTimeout(
-      url,
-      {
-        headers: {
-          accept: "text/html,application/xhtml+xml",
-          "user-agent": "Mozilla/5.0 (compatible; bughunt-researcher/1.0)"
-        }
-      }
-    );
-
-    if (!response.ok) return null;
-
-    return {
-      url,
-      html: (await response.text()).slice(0, 250_000)
-    };
-  } catch {
-    return null;
-  }
-}
 
 async function discoverFromWebsite(
   website?: string
