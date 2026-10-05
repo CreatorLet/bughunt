@@ -749,8 +749,9 @@ function githubOwnerHints(
 
     raw = raw
       .replace(/^https?:\/\//i, "")
-      .split("/")[0] ?? ""
-      .replace(/\.[a-z]{2,}$/i, "");
+      .split("/")[0] ?? "";
+
+    raw = raw.replace(/\.[a-z]{2,}$/i, "");
 
     const normalized = raw
       .toLowerCase()
