@@ -108,77 +108,35 @@ async function discover(args: string[]): Promise<void> {
   const protocols = await listBscProtocols(
     minTvl,
     maxTvl,
-    0
+    limit
   );
 
   console.log(
-    "Target resolved protocols: " +
-      limit +
-      " (will continue past unresolved rows)"
+    "Selected TVL-ranked protocols: " +
+      protocols.length +
+      " (unresolved protocols remain in the report)"
   );
 
-  const discovered: Array<{
-    protocol: (typeof protocols)[number];
-    addresses: Awaited<ReturnType<typeof discoverBscContractAddresses>>;
-  }> = [];
-
-  const batchSize = Math.max(3, Math.min(5, limit));
-
-  for (
-    let offset = 0;
-    offset < protocols.length &&
-    discovered.filter((item) => item.addresses.length > 0).length < limit;
-    offset += batchSize
-  ) {
-    const batch = protocols.slice(offset, offset + batchSize);
-
-    const batchResults = await Promise.all(
-      batch.map(async (p) => ({
-        protocol: p,
-        addresses: await discoverBscContractAddresses(p, 8)
-      }))
-    );
-
-    discovered.push(...batchResults);
-
-    const resolvedCount = discovered.filter(
-      (item) => item.addresses.length > 0
-    ).length;
-
-    console.log(
-      "[Discovery] Resolved " +
-        Math.min(resolvedCount, limit) +
-        "/" +
-        limit +
-        " target protocol(s); searched " +
-        discovered.length +
-        " candidate protocol(s)."
-    );
-  }
+  const discovered = await Promise.all(
+    protocols.map(async (p) => ({
+      protocol: p,
+      addresses: await discoverBscContractAddresses(p, 8)
+    }))
+  );
 
   const resolvedCount = discovered.filter(
     (item) => item.addresses.length > 0
   ).length;
 
-  const output = discovered.filter(
-    (item) => item.addresses.length > 0
-  ).slice(0, limit);
-
-  if (!output.length) {
-    output.push(...discovered.slice(0, limit));
-  }
-
   console.log(
-    "[Discovery] Final resolved targets: " +
-      Math.min(resolvedCount, limit) +
-      "/" +
-      limit +
-      " (found " +
+    "[Discovery] Resolved " +
       resolvedCount +
-      " during search)"
+      "/" +
+      discovered.length +
+      " selected protocol(s)."
   );
 
-  output.forEach(({ protocol: p, addresses }, i) => {
+  discovered.forEach(({ protocol: p, addresses }, i) => {
     const lines = [
       `${i + 1}. ${p.name ?? p.slug ?? "Unknown"}`,
       "   TVL: $" +
