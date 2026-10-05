@@ -677,7 +677,7 @@ export async function runBscScan(
         selectedContract.sourceBundle =
           buildSourceBundle(
             bundleInputs,
-            1_200_000
+            config.aiSourceChars
           );
 
         candidate.contract = selectedContract;
