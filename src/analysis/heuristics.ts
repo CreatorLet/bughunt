@@ -83,6 +83,16 @@ const RULES: Rule[] = [
     confidence: "low",
     weight: 2
   }
+,
+  {
+    id: "redeem-zero-truncation",
+    severity: "high",
+    title: "Redemption truncation may produce zero tokens burned for non-zero underlying",
+    pattern: /\bfunction\s+redeem\w*[\s\S]{0,12000}?\bredeemTokens\s*=\s*[\s\S]{0,500}?(?:divScalarByExpTruncate|divScalarTruncate)[\s\S]{0,6000}?(?:doTransferOut|\.(?:transfer|transferFrom)\s*\()[\s\S]{0,3000}?(?:totalSupply|accountTokens)[\s\S]{0,1800}?redeemTokens/i,
+    explanation: "A redeem-by-amount path may round the token/share amount down to zero while still transferring underlying assets and changing token accounting; verify that a non-zero redeemTokens minimum is enforced before the asset transfer.",
+    confidence: "medium",
+    weight: 6
+  }
 ];
 
 function stripComments(source: string): string {
