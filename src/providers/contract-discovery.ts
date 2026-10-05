@@ -424,24 +424,89 @@ function githubFileScore(
   return Math.max(0, Math.min(100, score));
 }
 
-async function discoverFromWebsite(
-  website?: string
-): Promise<ContractAddressCandidate[]> {
-  if (typeof website !== "string" || !website.trim()) {
-    return [];
+function relatedHosts(home: URL, links: string[]): string[] {
+  const root = home.hostname
+    .split(".")
+    .slice(-2)
+    .join(".");
+
+  const urls = new Set<string>();
+
+  for (const raw of links) {
+    try {
+      const target = new URL(raw, home);
+      if (!/^https?:$/.test(target.protocol)) continue;
+
+      const targetRoot = target.hostname
+        .split(".")
+        .slice(-2)
+        .join(".");
+
+      if (
+        target.hostname === home.hostname ||
+        targetRoot === root
+      ) {
+        target.hash = "";
+        urls.add(target.toString());
+      }
+    } catch {
+      // Ignore malformed links.
+    }
   }
 
-  let url: URL;
-  try {
-    url = new URL(website.trim());
-    if (!/^https?:$/.test(url.protocol)) return [];
-  } catch {
-    return [];
+  return [...urls];
+}
+
+function relevantLinkScore(url: string): number {
+  const lower = url.toLowerCase();
+  let score = 0;
+
+  if (/(contract|contracts|address|addresses|deployment|deploy|smart-contract|smartcontract|developer|developers)/.test(lower)) {
+    score += 40;
   }
 
+  if (/(docs|documentation|docs\.|wiki)/.test(lower)) {
+    score += 30;
+  }
+
+  if (/(bsc|bnb|binance)/.test(lower)) {
+    score += 20;
+  }
+
+  if (/(github|gitbook)/.test(lower)) {
+    score += 10;
+  }
+
+  return score;
+}
+
+function extractLinks(html: string, base: URL): string[] {
+  const links: string[] = [];
+
+  for (const match of html.matchAll(
+    /href\\s*=\\s*["']([^"']+)["']/gi
+  )) {
+    if (!match[1]) continue;
+
+    try {
+      const target = new URL(match[1], base);
+      if (!/^https?:$/.test(target.protocol)) continue;
+      target.hash = "";
+      links.push(target.toString());
+    } catch {
+      // Ignore malformed links.
+    }
+  }
+
+  return [...new Set(links)];
+}
+
+async function fetchWebsitePage(
+  url: string
+): Promise<{ url: string; html: string } | null> {
   try {
     const response = await fetchWithTimeout(
-      url.toString(),
+      url,
       {
         headers: {
           accept: "text/html,application/xhtml+xml",
@@ -450,27 +515,90 @@ async function discoverFromWebsite(
       }
     );
 
-    if (!response.ok) return [];
+    if (!response.ok) return null;
 
-    const html = (await response.text()).slice(0, 250_000);
-    const candidates: ContractAddressCandidate[] = [];
+    return {
+      url,
+      html: (await response.text()).slice(0, 250_000)
+    };
+  } catch {
+    return null;
+  }
+}
 
-    for (const match of html.matchAll(ADDRESS_RE)) {
+async function discoverFromWebsite(
+  website?: string
+): Promise<ContractAddressCandidate[]> {
+  if (typeof website !== "string" || !website.trim()) {
+    return [];
+  }
+
+  let home: URL;
+  try {
+    home = new URL(website.trim());
+    if (!/^https?:$/.test(home.protocol)) return [];
+    home.hash = "";
+  } catch {
+    return [];
+  }
+
+  const first = await fetchWebsitePage(home.toString());
+  if (!first) return [];
+
+  const pages = [
+    first,
+    ...relatedHosts(
+      home,
+      extractLinks(first.html, home)
+    )
+      .map((url) => ({
+        url,
+        score: relevantLinkScore(url)
+      }))
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map((item) => item.url)
+      .map((url) => ({ url, html: "" }))
+  ];
+
+  const fetched = await Promise.all(
+    pages.slice(1).map((page) =>
+      fetchWebsitePage(page.url)
+    )
+  );
+
+  const documents = [
+    first,
+    ...fetched.filter(
+      (item): item is { url: string; html: string } =>
+        Boolean(item)
+    )
+  ];
+
+  const candidates: ContractAddressCandidate[] = [];
+
+  for (const document of documents) {
+    for (const match of document.html.matchAll(ADDRESS_RE)) {
       const offset = match.index ?? 0;
 
-      if (!isBscAddressContext(html, offset)) {
+      if (!isBscAddressContext(document.html, offset)) {
         continue;
       }
 
-      const context = html.slice(
-        Math.max(0, offset - 260),
-        Math.min(html.length, offset + 420)
+      const context = document.html.slice(
+        Math.max(0, offset - 280),
+        Math.min(document.html.length, offset + 460)
       );
 
       const lower = context.toLowerCase();
-      let score = 45;
+      let score = 48;
 
-      if (/\b(bsc|binance|bnb smart chain|chain.?id.{0,12}56)\b/.test(lower)) {
+      if (
+        /\\b(bsc|binance|bnb smart chain|chain.?id.{0,12}56)\\b/.test(
+          lower
+        )
+      ) {
         score += 30;
       }
 
@@ -479,10 +607,17 @@ async function discoverFromWebsite(
           lower
         )
       ) {
-        score += 15;
+        score += 18;
       }
 
-      if (score < 55) continue;
+      if (document.url !== home.toString()) {
+        score += Math.min(
+          12,
+          relevantLinkScore(document.url) / 5
+        );
+      }
+
+      if (score < 60) continue;
 
       candidates.push({
         address: match[0],
@@ -490,17 +625,15 @@ async function discoverFromWebsite(
         role: roleFromContext(context),
         score: Math.min(100, score),
         evidence:
-          "Website " +
-          url.origin +
+          "Website page " +
+          document.url +
           " exposed address context: " +
-          context.replace(/\s+/g, " ").slice(0, 280)
+          context.replace(/\\s+/g, " ").slice(0, 300)
       });
     }
-
-    return uniqueAddresses(candidates).slice(0, 10);
-  } catch {
-    return [];
   }
+
+  return uniqueAddresses(candidates).slice(0, 12);
 }
 
 function githubValues(value: unknown): string[] {
