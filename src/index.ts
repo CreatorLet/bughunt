@@ -81,7 +81,7 @@ function printHelp(): void {
       "  BSCSCAN_SEARCH_ENABLED (optional, default true)",
       "  DEFAULT_AI_LIMIT (optional, default 3)",
       "  AI_MIN_SEVERITY_SCORE (optional, default 30)",
-      "  AI_SOURCE_CHARS (optional, default 45000)",
+      "  AI_SOURCE_CHARS (optional, default 600000)",
       ""
     ].join("\n")
   );
@@ -122,6 +122,7 @@ async function discover(args: string[]): Promise<void> {
   );
 
   const results: Array<{
+    index: number;
     protocol: (typeof protocols)[number];
     addresses: Awaited<
       ReturnType<typeof discoverBscContractAddresses>
@@ -150,6 +151,7 @@ async function discover(args: string[]): Promise<void> {
           );
 
         results.push({
+          index,
           protocol,
           addresses
         });
@@ -177,6 +179,7 @@ async function discover(args: string[]): Promise<void> {
         );
 
         results.push({
+          index,
           protocol,
           addresses: []
         });
@@ -191,13 +194,17 @@ async function discover(args: string[]): Promise<void> {
     )
   );
 
-  const resolved = results
+  const orderedResults = [...results].sort(
+    (a, b) => a.index - b.index
+  );
+
+  const resolved = orderedResults
     .filter((item) => item.addresses.length > 0)
     .slice(0, limit);
 
   const discovered = [
     ...resolved,
-    ...results.filter(
+    ...orderedResults.filter(
       (item) => item.addresses.length === 0
     )
   ];
