@@ -82,7 +82,7 @@ function buildSystemPrompt(compactRetry: boolean): string {
   ].join(" ");
 }
 
-remove comment strippingfunction buildFocusedSource(
+function buildFocusedSource(
   source: string,
   context: Record<string, unknown> | undefined,
   maxChars: number
