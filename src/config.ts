@@ -53,7 +53,7 @@ export const config = {
   ),
   aiSourceChars: Math.max(
     12000,
-    Math.floor(optionalNumber("AI_SOURCE_CHARS", 45000))
+    Math.floor(optionalNumber("AI_SOURCE_CHARS", 600000))
   )
 };
 
