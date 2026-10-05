@@ -723,8 +723,56 @@ function githubValues(value: unknown): string[] {
   return [];
 }
 
+function githubOwnerHints(
+  protocol: DefiLlamaProtocol
+): string[] {
+  const values = [
+    protocol.slug,
+    protocol.name,
+    typeof protocol.url === "string" ? protocol.url : ""
+  ];
+
+  const hints = new Set<string>();
+
+  for (const value of values) {
+    if (typeof value !== "string" || !value.trim()) continue;
+
+    let raw = value.trim();
+
+    try {
+      if (/^https?:\\/\\//i.test(raw)) {
+        raw = new URL(raw).hostname.replace(/^www\\./i, "");
+      }
+    } catch {
+      // Keep the original string as a fallback hint.
+    }
+
+    raw = raw
+      .replace(/^https?:\\/\\//i, "")
+      .split("/")[0]
+      .replace(/\\.[a-z]{2,}$/i, "");
+
+    const normalized = raw
+      .toLowerCase()
+      .replace(/[^a-z0-9-]+/g, "-")
+      .replace(/^-+|-+$/g, "");
+
+    if (!normalized) continue;
+
+    hints.add(normalized);
+    if (normalized.endsWith("-io")) {
+      hints.add(normalized.slice(0, -3));
+    } else {
+      hints.add(normalized + "-io");
+    }
+  }
+
+  return [...hints].slice(0, 6);
+}
+
 async function discoverFromGithub(
-  github?: unknown
+  github?: unknown,
+  protocol?: DefiLlamaProtocol
 ): Promise<ContractAddressCandidate[]> {
   const initialRepos = githubValues(github).flatMap((value) => {
     const repo = extractRepo(value);
@@ -742,6 +790,21 @@ async function discoverFromGithub(
     );
     for (const sibling of siblings) {
       repoIds.add(sibling);
+    }
+  }
+
+  if (protocol) {
+    const excluded = new Set(repoIds);
+    for (const owner of githubOwnerHints(protocol)) {
+      const siblings = await discoverGithubSiblingRepos(
+        owner,
+        excluded
+      );
+      for (const sibling of siblings) {
+        repoIds.add(sibling);
+        excluded.add(sibling);
+      }
+      if (repoIds.size >= 6) break;
     }
   }
 
@@ -869,14 +932,21 @@ export async function discoverBscContractAddresses(
     );
   }
 
-  if (candidates.length < 2 && protocol.slug) {
+  let detail:
+    | (DefiLlamaProtocol & Record<string, unknown>)
+    | undefined;
+
+  if (protocol.slug) {
     try {
-      const detail = await getProtocol(protocol.slug);
-      collectAddressStrings(
-        detail,
-        "protocol",
-        candidates
-      );
+      detail = await getProtocol(protocol.slug);
+
+      if (candidates.length < 2) {
+        collectAddressStrings(
+          detail,
+          "protocol",
+          candidates
+        );
+      }
     } catch {
       // Keep other discovery sources alive.
     }
@@ -962,9 +1032,16 @@ export async function discoverBscContractAddresses(
       item.score >= 85
   );
 
-  if (!coreEstablished && protocol.github) {
+  if (!coreEstablished) {
+    const githubSource =
+      protocol.github ??
+      detail?.github;
+
     candidates.push(
-      ...(await discoverFromGithub(protocol.github))
+      ...(await discoverFromGithub(
+        githubSource,
+        protocol
+      ))
     );
     ranked = uniqueAddresses(candidates);
   }
