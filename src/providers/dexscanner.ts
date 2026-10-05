@@ -237,7 +237,7 @@ export async function discoverFromDexScanner(
       const quoteScore = tokenMatchScore(protocol, pair.quoteToken);
       const matchScore = Math.max(baseScore, quoteScore);
 
-      if (matchScore < 55) continue;
+      if (matchScore < 80) continue;
 
       sawUsefulPair = true;
 
