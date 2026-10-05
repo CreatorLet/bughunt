@@ -484,7 +484,7 @@ function extractLinks(html: string, base: URL): string[] {
   const links: string[] = [];
 
   for (const match of html.matchAll(
-    /href\\s*=\\s*["']([^"']+)["']/gi
+    /href\s*=\s*["']([^"']+)["']/gi
   )) {
     if (!match[1]) continue;
 
@@ -595,7 +595,7 @@ async function discoverFromWebsite(
       let score = 48;
 
       if (
-        /\\b(bsc|binance|bnb smart chain|chain.?id.{0,12}56)\\b/.test(
+        /\b(bsc|binance|bnb smart chain|chain.?id.{0,12}56)\b/.test(
           lower
         )
       ) {
