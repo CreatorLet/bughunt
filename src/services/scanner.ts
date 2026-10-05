@@ -499,7 +499,7 @@ export async function runBscScan(
   const protocols = await listBscProtocols(
     minTvl,
     maxTvl,
-    0
+    limit
   );
 
   const candidates: ScanCandidate[] =
@@ -680,10 +680,6 @@ export async function runBscScan(
       candidate.screenScore = scoreCandidate(candidate);
       return candidate;
     },
-    {
-      stopAfterSuccess: limit,
-      isSuccess: (candidate) => Boolean(candidate.contract)
-    }
   );
 
   const processed = new Map(
@@ -709,26 +705,10 @@ export async function runBscScan(
     )
   );
 
-  const selectedForReport: ScanCandidate[] = [];
-  let selectedResolvedCount = 0;
-
-  for (const candidate of processedCandidates) {
-    if (
-      candidate.contract ||
-      selectedResolvedCount < limit
-    ) {
-      selectedForReport.push(candidate);
-
-      if (candidate.contract) {
-        selectedResolvedCount += 1;
-      }
-    }
-  }
-
   candidates.splice(
     0,
     candidates.length,
-    ...selectedForReport
+    ...processedCandidates
   );
 
   const sortedForAi = candidates
