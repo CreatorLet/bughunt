@@ -58,6 +58,36 @@ function protocolTerms(protocol: DefiLlamaProtocol): string[] {
   return [...unique.values()].slice(0, 4);
 }
 
+function hasStrongTokenIdentity(
+  protocol: DefiLlamaProtocol,
+  token: { name?: string; symbol?: string } | undefined
+): boolean {
+  if (!token) return false;
+
+  const targets = [
+    protocol.name,
+    protocol.symbol,
+    protocol.slug
+  ]
+    .filter(
+      (value): value is string =>
+        typeof value === "string" && value.trim().length >= 2
+    )
+    .map((value) => compact(value))
+    .filter(Boolean);
+
+  const tokenName = compact(token.name ?? "");
+  const tokenSymbol = compact(token.symbol ?? "");
+
+  return targets.some(
+    (target) =>
+      target === tokenName ||
+      (target.length >= 4 && tokenName.includes(target)) ||
+      (target.length >= 4 && target === tokenSymbol) ||
+      (target.length >= 4 && tokenSymbol.includes(target))
+  );
+}
+
 function tokenMatchScore(
   protocol: DefiLlamaProtocol,
   token: { name?: string; symbol?: string } | undefined
@@ -237,7 +267,17 @@ export async function discoverFromDexScanner(
       const quoteScore = tokenMatchScore(protocol, pair.quoteToken);
       const matchScore = Math.max(baseScore, quoteScore);
 
-      if (matchScore < 80) continue;
+      if (
+        matchScore < 80 ||
+        !hasStrongTokenIdentity(
+          protocol,
+          baseScore >= quoteScore
+            ? pair.baseToken
+            : pair.quoteToken
+        )
+      ) {
+        continue;
+      }
 
       sawUsefulPair = true;
 
