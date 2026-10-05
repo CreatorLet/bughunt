@@ -215,6 +215,22 @@ export interface DeepSeekAnalysis {
   usage?: DeepSeekUsage;
 }
 
+export interface ContractSourceBundle {
+  source: string;
+  sourceCharacters: number;
+  coverage: "complete" | "partial";
+  contracts: Array<{
+    address: string;
+    contractName?: string;
+    role?: ContractAddressRole;
+    relation?: ContractAddressCandidate["relation"];
+    sourceQuality?: ContractResearch["sourceQuality"];
+    sourceFiles: string[];
+  }>;
+  files: string[];
+  contractNames: string[];
+}
+
 export interface ContractResearch {
   chainId: string;
   address: string;
@@ -229,6 +245,7 @@ export interface ContractResearch {
   sourceError?: string;
   implementationSourceError?: string;
   sourceCode?: string;
+  sourceBundle?: ContractSourceBundle;
   abi?: unknown;
   metadata?: EtherscanSourceRecord;
   goPlus?: GoPlusTokenSecurity | null;
