@@ -20,6 +20,7 @@ export interface DefiLlamaProtocol {
 export type ContractAddressSource =
   | "defillama"
   | "defillama-detail"
+  | "defillama-adapter"
   | "github"
   | "website"
   | "dexscreener"
