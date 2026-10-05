@@ -10,10 +10,14 @@ export interface SourceBundleInput {
   contractName?: string;
   role?: ContractAddressCandidate["role"];
   relation?: ContractAddressCandidate["relation"];
-  report?: Pick<ContractResearch, "sourceCode" | "sourceQuality" | "sourceFiles">;
+  report?: Pick<
+    ContractResearch,
+    "sourceCode" | "sourceQuality" | "sourceFiles" | "contractNames"
+  >;
   source?: string;
   sourceQuality?: ContractResearch["sourceQuality"];
   sourceFiles?: string[];
+  contractNames?: string[];
 }
 
 function sourceHash(source: string): string {
@@ -41,7 +45,15 @@ export function buildSourceBundle(
     if (seenAddresses.has(addressKey)) continue;
 
     const hash = sourceHash(source);
-    const sourceFiles = input.sourceFiles ?? input.report?.sourceFiles ?? [];
+    const sourceFiles =
+      input.sourceFiles ??
+      input.report?.sourceFiles ??
+      [];
+    const names =
+      input.contractNames ??
+      input.report?.contractNames ??
+      [];
+    for (const name of names) contractNames.add(name);
 
     contracts.push({
       address,
