@@ -13,6 +13,10 @@ import {
   summarizeContract
 } from "./services/research.js";
 import { runBscScan } from "./services/scanner.js";
+import {
+  extractContractNames,
+  normalizeSourceCode
+} from "./services/research.js";
 
 function parseFlag(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
@@ -108,7 +112,7 @@ async function discover(args: string[]): Promise<void> {
   const protocols = await listBscProtocols(
     minTvl,
     maxTvl,
-    limit
+    0
   );
 
   console.log(
@@ -117,23 +121,95 @@ async function discover(args: string[]): Promise<void> {
       " (unresolved protocols remain in the report)"
   );
 
-  const discovered = await Promise.all(
-    protocols.map(async (p) => ({
-      protocol: p,
-      addresses: await discoverBscContractAddresses(p, 8)
-    }))
+  const results: Array<{
+    protocol: (typeof protocols)[number];
+    addresses: Awaited<
+      ReturnType<typeof discoverBscContractAddresses>
+    >;
+  }> = [];
+
+  let cursor = 0;
+  let resolvedCount = 0;
+  const workerCount = Math.min(4, protocols.length || 1);
+
+  async function discoveryWorker(): Promise<void> {
+    while (true) {
+      if (resolvedCount >= limit) return;
+
+      const index = cursor++;
+      if (index >= protocols.length) return;
+
+      const protocol = protocols[index];
+      if (!protocol) return;
+
+      try {
+        const addresses =
+          await discoverBscContractAddresses(
+            protocol,
+            8
+          );
+
+        results.push({
+          protocol,
+          addresses
+        });
+
+        if (addresses.length > 0) {
+          resolvedCount += 1;
+        }
+
+        console.log(
+          "[Discovery] " +
+            (protocol.name ?? protocol.slug ?? "Unknown") +
+            " — " +
+            (addresses.length
+              ? "resolved " + addresses.length + " BSC address candidate(s)"
+              : "no BSC address found")
+        );
+      } catch (error) {
+        console.log(
+          "[Discovery] " +
+            (protocol.name ?? protocol.slug ?? "Unknown") +
+            " failed: " +
+            (error instanceof Error
+              ? error.message
+              : String(error))
+        );
+
+        results.push({
+          protocol,
+          addresses: []
+        });
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from(
+      { length: workerCount },
+      () => discoveryWorker()
+    )
   );
 
-  const resolvedCount = discovered.filter(
-    (item) => item.addresses.length > 0
-  ).length;
+  const resolved = results
+    .filter((item) => item.addresses.length > 0)
+    .slice(0, limit);
+
+  const discovered = [
+    ...resolved,
+    ...results.filter(
+      (item) => item.addresses.length === 0
+    )
+  ];
 
   console.log(
     "[Discovery] Resolved " +
-      resolvedCount +
+      resolved.length +
       "/" +
-      discovered.length +
-      " selected protocol(s)."
+      limit +
+      " requested usable protocol target(s); searched " +
+      results.length +
+      " TVL-ranked candidate(s)."
   );
 
   discovered.forEach(({ protocol: p, addresses }, i) => {
@@ -579,6 +655,58 @@ async function scan(args: string[]): Promise<void> {
   console.log("  Markdown: " + result.markdownPath);
 }
 
+async function selftest(): Promise<void> {
+  const sample =
+    "// contract FakeName\ncontract RealA {}\ninterface IReal {}\nlibrary MathLib {}";
+
+  const names = extractContractNames(sample);
+  if (
+    !names.includes("RealA") ||
+    !names.includes("IReal") ||
+    !names.includes("MathLib") ||
+    names.includes("FakeName")
+  ) {
+    throw new Error(
+      "selftest: Solidity declaration extraction is incorrect."
+    );
+  }
+
+  const multiFile = JSON.stringify({
+    language: "Solidity",
+    sources: {
+      "A.sol": { content: "contract Alpha {}" },
+      "B.sol": { content: "interface IBeta {}" }
+    },
+    settings: {}
+  });
+
+  const normalized = normalizeSourceCode(multiFile);
+  if (
+    normalized.quality !== "standard-json" ||
+    normalized.files.length !== 2 ||
+    normalized.contractNames.length !== 2
+  ) {
+    throw new Error(
+      "selftest: standard-json source normalization failed."
+    );
+  }
+
+  const wrapped = "{{" + multiFile + "}}";
+  const wrappedNormalized = normalizeSourceCode(wrapped);
+  if (
+    wrappedNormalized.quality !== "standard-json" ||
+    wrappedNormalized.files.length !== 2
+  ) {
+    throw new Error(
+      "selftest: double-brace source normalization failed."
+    );
+  }
+
+  console.log(
+    "Selftest passed: source parsing and multi-file normalization are healthy."
+  );
+}
+
 async function main(): Promise<void> {
   const [command, ...args] =
     process.argv.slice(2);
@@ -590,6 +718,10 @@ async function main(): Promise<void> {
   ) {
     printHelp();
     return;
+  }
+
+  if (command === "selftest") {
+    return selftest();
   }
 
   if (command === "scan") {
