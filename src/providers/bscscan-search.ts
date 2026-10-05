@@ -21,7 +21,10 @@ function compact(value: string): string {
   return normalize(value).replace(/\s+/g, "");
 }
 
-function termsFor(protocol: DefiLlamaProtocol): string[] {
+function termsFor(
+  protocol: DefiLlamaProtocol,
+  extraTerms: string[] = []
+): string[] {
   const values = [
     protocol.name,
     protocol.symbol,
@@ -59,7 +62,19 @@ function termsFor(protocol: DefiLlamaProtocol): string[] {
     }
   }
 
-  return [...unique.values()].slice(0, 12);
+  for (const term of extraTerms) {
+    if (
+      typeof term === "string" &&
+      term.trim().length >= 4
+    ) {
+      unique.set(
+        normalize(term),
+        term.trim()
+      );
+    }
+  }
+
+  return [...unique.values()].slice(0, 16);
 }
 
 function roleForPath(pathType: string): ContractAddressRole {
@@ -135,11 +150,12 @@ async function search(query: string): Promise<string> {
 }
 
 export async function discoverFromBscScan(
-  protocol: DefiLlamaProtocol
+  protocol: DefiLlamaProtocol,
+  extraTerms: string[] = []
 ): Promise<ContractAddressCandidate[]> {
   if (!config.bscScanSearchEnabled) return [];
 
-  const terms = termsFor(protocol);
+  const terms = termsFor(protocol, extraTerms);
   if (!terms.length) return [];
 
   const candidates = new Map<string, ContractAddressCandidate>();
