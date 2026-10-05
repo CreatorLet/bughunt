@@ -377,11 +377,61 @@ function collectAddressStrings(
   }
 }
 
+function githubFileScore(
+  file: string,
+  context: string
+): number {
+  const lowerFile = file.toLowerCase();
+  const lower = context.toLowerCase();
+  let score = 42;
+
+  if (/\b(bsc|binance|bnb)\b/.test(lower)) score += 32;
+  if (
+    /(router|factory|vault|pool|gauge|masterchef|staking|bridge|proxy|implementation|treasury|governance|timelock)/.test(
+      lower
+    )
+  ) {
+    score += 20;
+  }
+
+  if (
+    /(deploy|deployment|address|config|router|factory|vault|pool|masterchef|staking)/.test(
+      lowerFile
+    )
+  ) {
+    score += 16;
+  }
+
+  if (
+    /(router|factory|vault|pool|gauge|masterchef|staking|bridge)/.test(
+      lowerFile
+    )
+  ) {
+    score += 8;
+  }
+
+  if (
+    /(node_modules|vendor|cache|artifact|build|dist)/.test(
+      lowerFile
+    )
+  ) {
+    score -= 50;
+  }
+
+  if (/(mock|fixture)/.test(lowerFile)) score -= 16;
+  if (/(token|erc20|test)/.test(lowerFile)) score -= 6;
+
+  return Math.max(0, Math.min(100, score));
+}
+
+
 function extractBalancedValue(
   source: string,
   start: number
 ): string {
   const first = source[start];
+  if (!first) return "";
+
   const pairs: Record<string, string> = {
     "[": "]",
     "{": "}",
@@ -430,14 +480,11 @@ function extractBalancedValue(
   return "";
 }
 
-function extractBscAdapterSection(
-  source: string
-): string {
+function extractBscAdapterSection(source: string): string {
   const match = /\bbsc\s*:\s*/i.exec(source);
   if (!match) return "";
 
-  const valueStart = match.index + match[0].length;
-  let cursor = valueStart;
+  let cursor = match.index + match[0].length;
 
   while (
     cursor < source.length &&
@@ -447,6 +494,8 @@ function extractBscAdapterSection(
   }
 
   const first = source[cursor];
+  if (!first) return "";
+
   if (first === "[" || first === "{" || first === "(") {
     return extractBalancedValue(source, cursor);
   }
@@ -468,13 +517,14 @@ async function discoverFromDefiLlamaAdapter(
 
   if (!modulePath) return [];
 
-  const candidates: ContractAddressCandidate[] = [];
   const urls = [
     "https://raw.githubusercontent.com/DefiLlama/DefiLlama-Adapters/main/projects/" +
       modulePath,
     "https://raw.githubusercontent.com/DefiLlama/DefiLlama-Adapters/master/projects/" +
       modulePath
   ];
+
+  const candidates: ContractAddressCandidate[] = [];
 
   for (const url of urls) {
     try {
@@ -490,21 +540,20 @@ async function discoverFromDefiLlamaAdapter(
 
       if (!response.ok) continue;
 
-      const source = (await response.text()).slice(
-        0,
-        500_000
-      );
+      const source = (
+        await response.text()
+      ).slice(0, 500_000);
 
       const bscSection =
         extractBscAdapterSection(source);
 
       if (!bscSection) continue;
 
-      for (const match of bscSection.matchAll(ADDRESS_RE)) {
-        const address = match[0];
-
+      for (const match of bscSection.matchAll(
+        ADDRESS_RE
+      )) {
         candidates.push({
-          address,
+          address: match[0],
           source: "defillama-adapter",
           role: "core",
           score: 100,
@@ -513,21 +562,23 @@ async function discoverFromDefiLlamaAdapter(
             "DeFiLlama adapter " +
             modulePath +
             " BSC deployment/config value: " +
-            bscSection.replace(/\s+/g, " ").slice(0, 320)
+            bscSection
+              .replace(/\s+/g, " ")
+              .slice(0, 320)
         });
       }
 
-      if (candidates.length) {
-        break;
-      }
+      if (candidates.length) break;
     } catch {
-      // Try the next adapter branch.
+      // Try the alternate adapter branch.
     }
   }
 
-  return uniqueAddresses(candidates).slice(0, 12);
+  return uniqueAddresses(candidates).slice(
+    0,
+    12
+  );
 }
-
 
 async function discoverFromWebsite(
   website?: string
@@ -536,72 +587,46 @@ async function discoverFromWebsite(
     return [];
   }
 
-  let home: URL;
+  let url: URL;
   try {
-    home = new URL(website.trim());
-    if (!/^https?:$/.test(home.protocol)) return [];
-    home.hash = "";
+    url = new URL(website.trim());
+    if (!/^https?:$/.test(url.protocol)) return [];
   } catch {
     return [];
   }
 
-  const first = await fetchWebsitePage(home.toString());
-  if (!first) return [];
+  try {
+    const response = await fetchWithTimeout(
+      url.toString(),
+      {
+        headers: {
+          accept: "text/html,application/xhtml+xml",
+          "user-agent": "Mozilla/5.0 (compatible; bughunt-researcher/1.0)"
+        }
+      }
+    );
 
-  const pages = [
-    first,
-    ...relatedHosts(
-      home,
-      extractLinks(first.html, home)
-    )
-      .map((url) => ({
-        url,
-        score: relevantLinkScore(url)
-      }))
-      .filter((item) => item.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 6)
-      .map((item) => item.url)
-      .map((url) => ({ url, html: "" }))
-  ];
+    if (!response.ok) return [];
 
-  const fetched = await Promise.all(
-    pages.slice(1).map((page) =>
-      fetchWebsitePage(page.url)
-    )
-  );
+    const html = (await response.text()).slice(0, 250_000);
+    const candidates: ContractAddressCandidate[] = [];
 
-  const documents = [
-    first,
-    ...fetched.filter(
-      (item): item is { url: string; html: string } =>
-        Boolean(item)
-    )
-  ];
-
-  const candidates: ContractAddressCandidate[] = [];
-
-  for (const document of documents) {
-    for (const match of document.html.matchAll(ADDRESS_RE)) {
+    for (const match of html.matchAll(ADDRESS_RE)) {
       const offset = match.index ?? 0;
 
-      if (!isBscAddressContext(document.html, offset)) {
+      if (!isBscAddressContext(html, offset)) {
         continue;
       }
 
-      const context = document.html.slice(
-        Math.max(0, offset - 280),
-        Math.min(document.html.length, offset + 460)
+      const context = html.slice(
+        Math.max(0, offset - 260),
+        Math.min(html.length, offset + 420)
       );
 
       const lower = context.toLowerCase();
-      let score = 48;
+      let score = 45;
 
-      if (
-        /\b(bsc|binance|bnb smart chain|chain.?id.{0,12}56)\b/.test(
-          lower
-        )
-      ) {
+      if (/\b(bsc|binance|bnb smart chain|chain.?id.{0,12}56)\b/.test(lower)) {
         score += 30;
       }
 
@@ -610,17 +635,10 @@ async function discoverFromWebsite(
           lower
         )
       ) {
-        score += 18;
+        score += 15;
       }
 
-      if (document.url !== home.toString()) {
-        score += Math.min(
-          12,
-          relevantLinkScore(document.url) / 5
-        );
-      }
-
-      if (score < 60) continue;
+      if (score < 55) continue;
 
       candidates.push({
         address: match[0],
@@ -628,15 +646,17 @@ async function discoverFromWebsite(
         role: roleFromContext(context),
         score: Math.min(100, score),
         evidence:
-          "Website page " +
-          document.url +
+          "Website " +
+          url.origin +
           " exposed address context: " +
-          context.replace(/\\s+/g, " ").slice(0, 300)
+          context.replace(/\s+/g, " ").slice(0, 280)
       });
     }
-  }
 
-  return uniqueAddresses(candidates).slice(0, 12);
+    return uniqueAddresses(candidates).slice(0, 10);
+  } catch {
+    return [];
+  }
 }
 
 function githubValues(value: unknown): string[] {
@@ -653,86 +673,6 @@ function githubValues(value: unknown): string[] {
     ];
   }
   return [];
-}
-
-async function discoverGithubContractNames(
-  github?: unknown
-): Promise<string[]> {
-  const repos = [
-    ...new Set(
-      githubValues(github)
-        .flatMap((value) => {
-          const repo = extractRepo(value);
-          return repo ? [repo.owner + "/" + repo.repo] : [];
-        })
-    )
-  ];
-
-  const names = new Set<string>();
-
-  for (const repoId of repos.slice(0, 3)) {
-    const [owner, repo] = repoId.split("/");
-    if (!owner || !repo) continue;
-
-    try {
-      const metadata = await getJson<GithubRepo>(
-        GITHUB_API +
-          "/repos/" +
-          encodeURIComponent(owner) +
-          "/" +
-          encodeURIComponent(repo)
-      );
-
-      const branch = metadata.default_branch ?? "main";
-      const tree = await getJson<{ tree?: GithubTreeItem[] }>(
-        GITHUB_API +
-          "/repos/" +
-          encodeURIComponent(owner) +
-          "/" +
-          encodeURIComponent(repo) +
-          "/git/trees/" +
-          encodeURIComponent(branch) +
-          "?recursive=1"
-      );
-
-      for (const item of tree.tree ?? []) {
-        if (
-          item.type !== "blob" ||
-          typeof item.path !== "string" ||
-          !/\.sol$/i.test(item.path)
-        ) {
-          continue;
-        }
-
-        const file = item.path
-          .split("/")
-          .pop()
-          ?.replace(/\.sol$/i, "");
-
-        if (!file) continue;
-
-        if (
-          /^(I[A-Z]|Mock|Test|Script|Abstract)/.test(
-            file
-          )
-        ) {
-          continue;
-        }
-
-        if (
-          /(factory|router|vault|pool|staking|masterchef|registry|strategy|proxy|sickle|gauge|bridge)/i.test(
-            file
-          )
-        ) {
-          names.add(file);
-        }
-      }
-    } catch {
-      // Continue to other GitHub repositories.
-    }
-  }
-
-  return [...names].slice(0, 8);
 }
 
 async function discoverFromGithub(
@@ -844,12 +784,15 @@ export async function discoverBscContractAddresses(
   const candidates: ContractAddressCandidate[] =
     rawProtocolAddresses(protocol);
 
-  if (!candidates.some(
-    (item) =>
-      (item.role === "core" ||
-        item.role === "implementation") &&
-      item.score >= 85
-  )) {
+  const hasStrongCoreSeed =
+    candidates.some(
+      (item) =>
+        (item.role === "core" ||
+          item.role === "implementation") &&
+        item.score >= 85
+    );
+
+  if (!hasStrongCoreSeed) {
     candidates.push(
       ...(await discoverFromDefiLlamaAdapter(protocol))
     );
@@ -935,16 +878,8 @@ export async function discoverBscContractAddresses(
   );
 
   if (!hasStrongCore && !hasCredibleCore) {
-    const githubContractNames =
-      await discoverGithubContractNames(
-        protocol.github
-      );
-
     candidates.push(
-      ...(await discoverFromBscScan(
-        protocol,
-        githubContractNames
-      ))
+      ...(await discoverFromBscScan(protocol))
     );
     ranked = uniqueAddresses(candidates);
   }
