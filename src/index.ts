@@ -8,15 +8,12 @@ import {
 import { resolveProxyImplementation } from "./providers/rpc.js";
 import { getProtocol, listBscProtocols } from "./providers/defillama.js";
 import {
+  extractContractNames,
   normalizeSourceCode,
   researchContract,
   summarizeContract
 } from "./services/research.js";
 import { runBscScan } from "./services/scanner.js";
-import {
-  extractContractNames,
-  normalizeSourceCode
-} from "./services/research.js";
 
 function parseFlag(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
