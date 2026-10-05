@@ -695,7 +695,7 @@ async function selftest(): Promise<void> {
     );
   }
 
-  const wrapped = "{{" + multiFile + "}}";
+  const wrapped = "{" + multiFile + "}";
   const wrappedNormalized = normalizeSourceCode(wrapped);
   if (
     wrappedNormalized.quality !== "standard-json" ||
