@@ -386,8 +386,10 @@ function githubFileScore(
   let score = 42;
 
   if (/\b(bsc|binance|bnb)\b/.test(lower)) score += 32;
+  if (/\b(bsc|binance|bnb)\b/.test(lowerFile)) score += 24;
+
   if (
-    /(router|factory|vault|pool|gauge|masterchef|staking|bridge|proxy|implementation|treasury|governance|timelock)/.test(
+    /(router|factory|vault|pool|gauge|masterchef|staking|bridge|proxy|implementation|treasury|governance|timelock|sickle)/.test(
       lower
     )
   ) {
@@ -395,7 +397,7 @@ function githubFileScore(
   }
 
   if (
-    /(deploy|deployment|address|config|router|factory|vault|pool|masterchef|staking)/.test(
+    /(deploy|deployment|address|config|router|factory|vault|pool|masterchef|staking|sickle)/.test(
       lowerFile
     )
   ) {
@@ -403,7 +405,7 @@ function githubFileScore(
   }
 
   if (
-    /(router|factory|vault|pool|gauge|masterchef|staking|bridge)/.test(
+    /(router|factory|vault|pool|gauge|masterchef|staking|bridge|sickle)/.test(
       lowerFile
     )
   ) {
@@ -422,6 +424,52 @@ function githubFileScore(
   if (/(token|erc20|test)/.test(lowerFile)) score -= 6;
 
   return Math.max(0, Math.min(100, score));
+}
+
+interface GithubRepoSummary {
+  full_name?: string;
+  name?: string;
+  fork?: boolean;
+}
+
+async function discoverGithubSiblingRepos(
+  owner: string,
+  excludedRepos: Set<string>
+): Promise<string[]> {
+  const endpoints = [
+    GITHUB_API +
+      "/users/" +
+      encodeURIComponent(owner) +
+      "/repos?per_page=100&sort=updated",
+    GITHUB_API +
+      "/orgs/" +
+      encodeURIComponent(owner) +
+      "/repos?per_page=100&sort=updated"
+  ];
+
+  const siblingSignals =
+    /(^|[-_.])(tools|frontend|web|app|docs|site|dashboard|interface|ui|sdk|deploy|deployment)([-_.]|$)|tools|frontend|dashboard|interface/i;
+
+  for (const endpoint of endpoints) {
+    try {
+      const items = await getJson<GithubRepoSummary[]>(endpoint);
+      return items
+        .filter((item) => !item.fork)
+        .map((item) => item.full_name ?? "")
+        .filter((fullName) => {
+          if (!fullName || excludedRepos.has(fullName)) {
+            return false;
+          }
+          const name = fullName.split("/").pop() ?? "";
+          return siblingSignals.test(name);
+        })
+        .slice(0, 2);
+    } catch {
+      // The owner may be a user or an organization; try the alternate endpoint.
+    }
+  }
+
+  return [];
 }
 
 
@@ -678,16 +726,31 @@ function githubValues(value: unknown): string[] {
 async function discoverFromGithub(
   github?: unknown
 ): Promise<ContractAddressCandidate[]> {
-  const repos = [...new Set(githubValues(github).flatMap((value) => {
+  const initialRepos = githubValues(github).flatMap((value) => {
     const repo = extractRepo(value);
     return repo ? [repo] : [];
-  }).map((repo) => repo.owner + "/" + repo.repo))];
+  });
 
+  const repoIds = new Set(
+    initialRepos.map((repo) => repo.owner + "/" + repo.repo)
+  );
+
+  for (const repo of initialRepos.slice(0, 2)) {
+    const siblings = await discoverGithubSiblingRepos(
+      repo.owner,
+      repoIds
+    );
+    for (const sibling of siblings) {
+      repoIds.add(sibling);
+    }
+  }
+
+  const repos = [...repoIds];
   if (!repos.length) return [];
 
   const allCandidates: ContractAddressCandidate[] = [];
 
-  for (const repoId of repos.slice(0, 4)) {
+  for (const repoId of repos.slice(0, 6)) {
     const [owner, repo] = repoId.split("/");
     if (!owner || !repo) continue;
 
@@ -716,11 +779,19 @@ async function discoverFromGithub(
         .filter((item) => item.type === "blob" && typeof item.path === "string")
         .filter((item) => !/(node_modules|vendor|cache|artifact|build|dist)/i.test(item.path as string))
         .filter((item) => /\.(sol|md|json|ts|js|yaml|yml)$/i.test(item.path as string))
-        .sort((a, b) =>
-          Number(/deploy|deployment|address|config|router|factory|vault|pool|masterchef|staking/i.test(b.path as string)) -
-          Number(/deploy|deployment|address|config|router|factory|vault|pool|masterchef|staking/i.test(a.path as string))
-        )
-        .slice(0, 25);
+        .sort((a, b) => {
+          const pathSignal = (value: string): number => {
+            const lower = value.toLowerCase();
+            let score = 0;
+            if (/\b(bsc|binance|bnb)\b/.test(lower)) score += 4;
+            if (/(deploy|deployment|address|config|router|factory|vault|pool|masterchef|staking|sickle)/.test(lower)) score += 3;
+            if (/(sol|ts|js|json)/.test(lower)) score += 1;
+            return score;
+          };
+
+          return pathSignal(b.path as string) - pathSignal(a.path as string);
+        })
+        .slice(0, 30);
 
       const responses = await Promise.all(
         files.map(async (item) => {
