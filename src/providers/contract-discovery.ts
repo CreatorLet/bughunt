@@ -740,17 +740,17 @@ function githubOwnerHints(
     let raw = value.trim();
 
     try {
-      if (/^https?:\\/\\//i.test(raw)) {
-        raw = new URL(raw).hostname.replace(/^www\\./i, "");
+      if (/^https?:\/\//i.test(raw)) {
+        raw = new URL(raw).hostname.replace(/^www\./i, "");
       }
     } catch {
       // Keep the original string as a fallback hint.
     }
 
     raw = raw
-      .replace(/^https?:\\/\\//i, "")
+      .replace(/^https?:\/\//i, "")
       .split("/")[0]
-      .replace(/\\.[a-z]{2,}$/i, "");
+      .replace(/\.[a-z]{2,}$/i, "");
 
     const normalized = raw
       .toLowerCase()
