@@ -108,16 +108,16 @@ Default behavior:
 
 The configured default source budget is `600,000` characters. This can be changed with `AI_SOURCE_CHARS`.
 
-DeepSeek currently documents `deepseek-flash` as DeepSeek-V4.1-Flash with a 1M-token context window. Its published pricing is substantially lower than the V4-Pro tier, so Bughunt keeps `deepseek-flash` for the paid review stage. citeturn751793search3turn751793search2
+DeepSeek currently documents `deepseek-flash` as DeepSeek-V4.1-Flash with a 1M-token context window. Its published pricing is substantially lower than the V4-Pro tier, so Bughunt keeps `deepseek-flash` for the paid review stage.
 
 ## Address discovery
 
 Address discovery is now a multi-source resolver rather than a single DeFiLlama lookup.
 
 1. DeFiLlama metadata and protocol detail are checked first.
-2. DEX Screener searches by protocol name, symbol, and slug. Its official API documents pair search and token-to-pair lookup. citeturn543745search0turn543745search4
-3. DexScanner is queried through its public ranked BSC feeds. Its current documentation describes `trending`, `top`, `gainers`, and `new` feed types rather than an arbitrary name/address lookup endpoint, so Bughunt uses name matching against those feeds instead of pretending DexScanner has a documented direct search endpoint. citeturn543745search1turn543745search3
-4. BscScan public web search is used as a best-effort fallback. BscScan's documented contract API is address-based and does not provide a documented protocol-name search endpoint, so this fallback is intentionally non-authoritative. citeturn736777search0
+2. DEX Screener searches by protocol name, symbol, and slug. Its official API documents pair search and token-to-pair lookup.
+3. DexScanner is queried through its public ranked BSC feeds. Its current documentation describes `trending`, `top`, `gainers`, and `new` feed types rather than an arbitrary name/address lookup endpoint, so Bughunt uses name matching against those feeds instead of pretending DexScanner has a documented direct search endpoint.
+4. BscScan public web search is used as a best-effort fallback. BscScan's documented contract API is address-based and does not provide a documented protocol-name search endpoint, so this fallback is intentionally non-authoritative.
 5. If the protocol publishes a GitHub repository, Bughunt scans deployment/configuration/source files for BSC addresses.
 
 The resolver keeps multiple candidates, classifies likely roles, researches several candidates, and boosts addresses corroborated by multiple independent sources. This is important because a protocol name search can find a token while the real bounty-relevant surface may be a router, vault, implementation, staking contract, or other core contract.
