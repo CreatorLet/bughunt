@@ -95,6 +95,7 @@ export function buildSourceBundle(
     chunks.push(block);
     size += block.length;
     seenSources.add(hash);
+    seenAddresses.add(addressKey);
 
     for (const file of sourceFiles) files.add(file);
     for (const name of names) contractNames.add(name);
