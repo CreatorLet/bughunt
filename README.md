@@ -101,12 +101,12 @@ Default behavior:
 - Select at most **3** AI candidates
 - Prefer candidates with deterministic severity **>= 30/100**
 - If no candidate reaches the threshold, review only the top candidate as a fallback
-- Send a **focused source excerpt** rather than automatically sending the full source
+- Send the primary verified source plus the strongest related verified contracts as a protocol-aware source bundle
 - Ask for at most a small number of concise findings
 - Keep thinking effort at `low`
 - Retry only when the first JSON response is actually unusable
 
-The configured default source budget is `45,000` characters. This can be changed with `AI_SOURCE_CHARS (optional, default 600000)
+The configured default source budget is `600,000` characters. This can be changed with `AI_SOURCE_CHARS`.
 
 DeepSeek currently documents `deepseek-flash` as DeepSeek-V4.1-Flash with a 1M-token context window. Its published pricing is substantially lower than the V4-Pro tier, so Bughunt keeps `deepseek-flash` for the paid review stage. citeturn751793search3turn751793search2
 
