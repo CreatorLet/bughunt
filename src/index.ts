@@ -147,7 +147,7 @@ async function discover(args: string[]): Promise<void> {
 
     console.log(
       "[Discovery] Resolved " +
-        resolvedCount +
+        Math.min(resolvedCount, limit) +
         "/" +
         limit +
         " target protocol(s); searched " +
@@ -160,19 +160,12 @@ async function discover(args: string[]): Promise<void> {
     (item) => item.addresses.length > 0
   ).length;
 
-  const output = [];
-  let printedResolved = 0;
+  const output = discovered.filter(
+    (item) => item.addresses.length > 0
+  ).slice(0, limit);
 
-  for (const item of discovered) {
-    const hasAddress = item.addresses.length > 0;
-
-    if (!hasAddress || printedResolved < limit) {
-      output.push(item);
-
-      if (hasAddress) {
-        printedResolved += 1;
-      }
-    }
+  if (!output.length) {
+    output.push(...discovered.slice(0, limit));
   }
 
   console.log(
