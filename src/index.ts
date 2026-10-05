@@ -15,6 +15,7 @@ import {
 } from "./services/research.js";
 import { buildSourceBundle } from "./services/source-bundle.js";
 import { runBscScan } from "./services/scanner.js";
+import { runHeuristics } from "./analysis/heuristics.js";
 
 function parseFlag(args: string[], name: string): string | undefined {
   const index = args.indexOf(name);
@@ -739,6 +740,39 @@ async function selftest(): Promise<void> {
   ) {
     throw new Error(
       "selftest: double-brace source normalization failed."
+    );
+  }
+
+  const arithmeticFixture = [
+    "contract RoundingFixture {",
+    "  uint256 public totalSupply;",
+    "  mapping(address => uint256) public accountTokens;",
+    "  function redeemFresh(uint256 redeemAmountIn) external {",
+    "    uint256 redeemTokens = divScalarByExpTruncate(redeemAmountIn, exchangeRateMantissa);",
+    "    totalSupply = totalSupply - redeemTokens;",
+    "    accountTokens[msg.sender] = accountTokens[msg.sender] - redeemTokens;",
+    "    doTransferOut(msg.sender, redeemAmountIn);",
+    "  }",
+    "  function mintFresh(uint256 actualMintAmount) external {",
+    "    uint256 mintTokens = divScalarByExpTruncate(actualMintAmount, exchangeRateMantissa);",
+    "    doTransferIn(msg.sender, actualMintAmount);",
+    "    totalSupply = totalSupply + mintTokens;",
+    "    accountTokens[msg.sender] = accountTokens[msg.sender] + mintTokens;",
+    "  }",
+    "}"
+  ].join("\n");
+
+  const arithmeticHeuristics = runHeuristics(arithmeticFixture);
+  if (
+    !arithmeticHeuristics.findings.some(
+      (finding) => finding.id === "redeem-zero-truncation"
+    ) ||
+    !arithmeticHeuristics.findings.some(
+      (finding) => finding.id === "mint-zero-truncation"
+    )
+  ) {
+    throw new Error(
+      "selftest: arithmetic zero-rounding heuristics failed."
     );
   }
 
