@@ -13,6 +13,7 @@ import {
   researchContract,
   summarizeContract
 } from "./services/research.js";
+import { buildSourceBundle } from "./services/source-bundle.js";
 import { runBscScan } from "./services/scanner.js";
 
 function parseFlag(args: string[], name: string): string | undefined {
@@ -24,6 +25,34 @@ function hasFlag(args: string[], name: string): boolean {
   return args.includes(name);
 }
 
+
+function hasCredibleDiscoveryTarget(
+  addresses: Awaited<
+    ReturnType<typeof discoverBscContractAddresses>
+  >
+): boolean {
+  return addresses.some((item) => {
+    if (
+      (item.role === "core" ||
+        item.role === "implementation") &&
+      item.score >= 70
+    ) {
+      return true;
+    }
+
+    if (item.role === "token" && item.score >= 95) {
+      return true;
+    }
+
+    return (
+      (item.source === "defillama" ||
+        item.source === "defillama-adapter" ||
+        item.source === "bscscan" ||
+        item.source === "github") &&
+      item.score >= 90
+    );
+  });
+}
 
 function numberFlag(
   args: string[],
@@ -153,7 +182,7 @@ async function discover(args: string[]): Promise<void> {
           addresses
         });
 
-        if (addresses.length > 0) {
+        if (hasCredibleDiscoveryTarget(addresses)) {
           resolvedCount += 1;
         }
 
@@ -196,13 +225,16 @@ async function discover(args: string[]): Promise<void> {
   );
 
   const resolved = orderedResults
-    .filter((item) => item.addresses.length > 0)
+    .filter((item) =>
+      hasCredibleDiscoveryTarget(item.addresses)
+    )
     .slice(0, limit);
 
   const discovered = [
     ...resolved,
     ...orderedResults.filter(
-      (item) => item.addresses.length === 0
+      (item) =>
+        !hasCredibleDiscoveryTarget(item.addresses)
     )
   ];
 
@@ -703,6 +735,40 @@ async function selftest(): Promise<void> {
   ) {
     throw new Error(
       "selftest: double-brace source normalization failed."
+    );
+  }
+
+  const bundle = buildSourceBundle(
+    [
+      {
+        address:
+          "0x0000000000000000000000000000000000000001",
+        contractName: "Alpha",
+        source: "contract Alpha {}",
+        sourceFiles: ["A.sol"],
+        contractNames: ["Alpha"]
+      },
+      {
+        address:
+          "0x0000000000000000000000000000000000000002",
+        contractName: "Alpha",
+        source: "contract Alpha {}",
+        sourceFiles: ["A.sol"],
+        contractNames: ["Alpha"]
+      }
+    ],
+    1000
+  );
+
+  if (
+    !bundle ||
+    bundle.contracts.length !== 2 ||
+    bundle.files.length !== 1 ||
+    bundle.contractNames.length !== 1 ||
+    bundle.source.split("===== CONTRACT").length !== 2
+  ) {
+    throw new Error(
+      "selftest: source bundle deduplication failed."
     );
   }
 
