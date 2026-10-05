@@ -4,7 +4,8 @@ import type { DeepSeekAnalysis, DeepSeekUsage } from "../types.js";
 const BASE_URL = "https://api.deepseek.com";
 const MODEL = "deepseek-flash";
 const DEFAULT_MAX_SOURCE_CHARS = 600000;
-const MAX_OUTPUT_TOKENS = 6500;
+const THINKING_MAX_OUTPUT_TOKENS = 16000;
+const FALLBACK_MAX_OUTPUT_TOKENS = 9000;
 
 interface DeepSeekResponse {
   id?: string;
@@ -71,6 +72,9 @@ function buildSystemPrompt(compactRetry: boolean): string {
     "Do not execute transactions or provide secrets/private keys. Manual tests must be local/fork-only.",
     "Return JSON only.",
     "Top-level keys: summary, findings, manual_tests.",
+    "Keep the final JSON concise: normally 3–6 findings maximum, with short evidence and remediation fields.",
+    "Do not spend tokens restating the source, repeating function bodies, or narrating your reasoning.",
+    'Use this JSON shape: {"summary":{"overall_assessment":"...","key_risk_areas":[],"source_coverage":"..."},"findings":[],"manual_tests":[]}',
     "summary keys: overall_assessment, key_risk_areas, source_coverage.",
     "Each finding keys: title, finding_type, category, severity, confidence, affected_functions, evidence, root_cause, attacker_capabilities, prerequisites, exploit_path, violated_invariant_or_assumption, impact, exploitability_assessment, recommended_fix.",
     "finding_type must be vulnerability, privileged-risk, deployment-risk, known-standard, informational, or false-positive.",
@@ -158,12 +162,18 @@ function buildFocusedSource(
 async function requestAnalysis(
   apiKey: string,
   user: string,
-  compactRetry: boolean
+  options: {
+    compact: boolean;
+    thinking: boolean;
+    maxTokens: number;
+  }
 ): Promise<{
-  result: Record<string, unknown>;
+  result?: Record<string, unknown>;
   requestId?: string;
   usage?: DeepSeekUsage;
   finishReason?: string | null;
+  finalContent?: string;
+  reasoningCharacters?: number;
 }> {
   let response: Response;
 
@@ -176,14 +186,19 @@ async function requestAnalysis(
       },
       body: JSON.stringify({
         model: MODEL,
-        reasoning_effort: "low",
-        thinking: { type: "enabled" },
+        reasoning_effort: options.thinking ? "low" : "none",
+        thinking: {
+          type: options.thinking ? "enabled" : "disabled"
+        },
         response_format: { type: "json_object" },
         messages: [
-          { role: "system", content: buildSystemPrompt(compactRetry) },
+          {
+            role: "system",
+            content: buildSystemPrompt(options.compact)
+          },
           { role: "user", content: user }
         ],
-        max_tokens: MAX_OUTPUT_TOKENS
+        max_tokens: options.maxTokens
       })
     });
   } catch (error) {
@@ -212,20 +227,25 @@ async function requestAnalysis(
   const choice = data.choices?.[0];
   const content = choice?.message?.content;
 
+  const reasoningCharacters =
+    choice?.message?.reasoning_content?.length ?? 0;
+
   if (!content || !content.trim()) {
-    throw new Error(
-      "DeepSeek returned no final analysis content. finish_reason=" +
-        (choice?.finish_reason ?? "unknown") +
-        ", reasoning_chars=" +
-        (choice?.message?.reasoning_content?.length ?? 0)
-    );
+    return {
+      requestId: data.id,
+      usage: data.usage,
+      finishReason: choice?.finish_reason,
+      reasoningCharacters
+    };
   }
 
   return {
     result: parseJson(content),
     requestId: data.id,
     usage: data.usage,
-    finishReason: choice?.finish_reason
+    finishReason: choice?.finish_reason,
+    finalContent: content,
+    reasoningCharacters
   };
 }
 
@@ -263,10 +283,19 @@ export async function analyzeWithDeepSeek(input: {
     source: focused.source
   });
 
-  try {
-    const first = await requestAnalysis(apiKey, user, false);
+  let first: Awaited<ReturnType<typeof requestAnalysis>>;
 
-    if (first.finishReason !== "length") {
+  try {
+    first = await requestAnalysis(apiKey, user, {
+      compact: false,
+      thinking: true,
+      maxTokens: THINKING_MAX_OUTPUT_TOKENS
+    });
+
+    if (
+      first.result &&
+      first.finishReason !== "length"
+    ) {
       return {
         result: first.result,
         requestId: first.requestId,
@@ -282,8 +311,27 @@ export async function analyzeWithDeepSeek(input: {
     }
   }
 
-  // Retry only when malformed/truncated JSON makes the result unusable.
-  const retry = await requestAnalysis(apiKey, user, true);
+  // DeepSeek documents that finish_reason="length" can leave JSON
+  // incomplete, and JSON mode can occasionally return empty content.
+  // The fallback disables thinking so the output budget is spent on the
+  // structured security report instead of being consumed by reasoning.
+  const retry = await requestAnalysis(apiKey, user, {
+    compact: true,
+    thinking: false,
+    maxTokens: FALLBACK_MAX_OUTPUT_TOKENS
+  });
+
+  if (!retry.result) {
+    throw new Error(
+      "DeepSeek produced no usable final JSON after fallback. " +
+        "initial_finish_reason=" +
+        (first?.finishReason ?? "unknown") +
+        ", initial_reasoning_chars=" +
+        (first?.reasoningCharacters ?? 0) +
+        ", fallback_finish_reason=" +
+        (retry.finishReason ?? "unknown")
+    );
+  }
 
   return {
     result: retry.result,
