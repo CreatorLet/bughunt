@@ -283,7 +283,9 @@ export async function analyzeWithDeepSeek(input: {
     source: focused.source
   });
 
-  let first: Awaited<ReturnType<typeof requestAnalysis>>;
+  let first:
+    | Awaited<ReturnType<typeof requestAnalysis>>
+    | undefined;
 
   try {
     first = await requestAnalysis(apiKey, user, {
