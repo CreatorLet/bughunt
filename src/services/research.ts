@@ -144,10 +144,23 @@ function sourceEntries(
       : record;
 
   const entries: Array<[string, string]> = [];
+  const metadataKeys = new Set([
+    "language",
+    "settings",
+    "compiler",
+    "optimizer",
+    "version"
+  ]);
 
   for (const [file, entry] of Object.entries(
     sourceRoot
   )) {
+    if (
+      sourceRoot === record &&
+      metadataKeys.has(file)
+    ) {
+      continue;
+    }
     if (
       entry &&
       typeof entry === "object" &&
