@@ -507,15 +507,6 @@ export async function researchContract(
     }
   }
 
-  const heuristic = source
-    ? runHeuristics(source)
-    : { findings: [], score: 0 };
-
-  const surfaces = analyzeFunctionSurfaces(
-    source,
-    combinedAbi
-  );
-
   const combinedAbi = (() => {
     if (!implementationAbi) return abi;
 
@@ -531,6 +522,15 @@ export async function researchContract(
 
     return abi;
   })();
+
+  const heuristic = source
+    ? runHeuristics(source)
+    : { findings: [], score: 0 };
+
+  const surfaces = analyzeFunctionSurfaces(
+    source,
+    combinedAbi
+  );
 
   let goPlus: ContractResearch["goPlus"] = null;
   let goPlusError: string | undefined;
