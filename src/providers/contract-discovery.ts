@@ -655,6 +655,86 @@ function githubValues(value: unknown): string[] {
   return [];
 }
 
+async function discoverGithubContractNames(
+  github?: unknown
+): Promise<string[]> {
+  const repos = [
+    ...new Set(
+      githubValues(github)
+        .flatMap((value) => {
+          const repo = extractRepo(value);
+          return repo ? [repo.owner + "/" + repo.repo] : [];
+        })
+    )
+  ];
+
+  const names = new Set<string>();
+
+  for (const repoId of repos.slice(0, 3)) {
+    const [owner, repo] = repoId.split("/");
+    if (!owner || !repo) continue;
+
+    try {
+      const metadata = await getJson<GithubRepo>(
+        GITHUB_API +
+          "/repos/" +
+          encodeURIComponent(owner) +
+          "/" +
+          encodeURIComponent(repo)
+      );
+
+      const branch = metadata.default_branch ?? "main";
+      const tree = await getJson<{ tree?: GithubTreeItem[] }>(
+        GITHUB_API +
+          "/repos/" +
+          encodeURIComponent(owner) +
+          "/" +
+          encodeURIComponent(repo) +
+          "/git/trees/" +
+          encodeURIComponent(branch) +
+          "?recursive=1"
+      );
+
+      for (const item of tree.tree ?? []) {
+        if (
+          item.type !== "blob" ||
+          typeof item.path !== "string" ||
+          !/\.sol$/i.test(item.path)
+        ) {
+          continue;
+        }
+
+        const file = item.path
+          .split("/")
+          .pop()
+          ?.replace(/\.sol$/i, "");
+
+        if (!file) continue;
+
+        if (
+          /^(I[A-Z]|Mock|Test|Script|Abstract)/.test(
+            file
+          )
+        ) {
+          continue;
+        }
+
+        if (
+          /(factory|router|vault|pool|staking|masterchef|registry|strategy|proxy|sickle|gauge|bridge)/i.test(
+            file
+          )
+        ) {
+          names.add(file);
+        }
+      }
+    } catch {
+      // Continue to other GitHub repositories.
+    }
+  }
+
+  return [...names].slice(0, 8);
+}
+
 async function discoverFromGithub(
   github?: unknown
 ): Promise<ContractAddressCandidate[]> {
@@ -855,8 +935,16 @@ export async function discoverBscContractAddresses(
   );
 
   if (!hasStrongCore && !hasCredibleCore) {
+    const githubContractNames =
+      await discoverGithubContractNames(
+        protocol.github
+      );
+
     candidates.push(
-      ...(await discoverFromBscScan(protocol))
+      ...(await discoverFromBscScan(
+        protocol,
+        githubContractNames
+      ))
     );
     ranked = uniqueAddresses(candidates);
   }
