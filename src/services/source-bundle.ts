@@ -53,19 +53,23 @@ export function buildSourceBundle(
       input.contractNames ??
       input.report?.contractNames ??
       [];
-    for (const name of names) contractNames.add(name);
 
-    contracts.push({
-      address,
-      contractName: input.contractName,
-      role: input.role,
-      relation: input.relation,
-      sourceQuality: input.sourceQuality ?? input.report?.sourceQuality,
-      sourceFiles
-    });
-    seenAddresses.add(addressKey);
+    if (seenSources.has(hash)) {
+      seenAddresses.add(addressKey);
+      for (const file of sourceFiles) files.add(file);
+      for (const name of names) contractNames.add(name);
 
-    if (seenSources.has(hash)) continue;
+      contracts.push({
+        address,
+        contractName: input.contractName,
+        role: input.role,
+        relation: input.relation,
+        sourceQuality:
+          input.sourceQuality ?? input.report?.sourceQuality,
+        sourceFiles
+      });
+      continue;
+    }
 
     const header =
       "// ===== CONTRACT " +
@@ -93,6 +97,17 @@ export function buildSourceBundle(
     seenSources.add(hash);
 
     for (const file of sourceFiles) files.add(file);
+    for (const name of names) contractNames.add(name);
+
+    contracts.push({
+      address,
+      contractName: input.contractName,
+      role: input.role,
+      relation: input.relation,
+      sourceQuality:
+        input.sourceQuality ?? input.report?.sourceQuality,
+      sourceFiles
+    });
   }
 
   if (!chunks.length) return undefined;
