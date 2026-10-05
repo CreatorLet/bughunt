@@ -232,7 +232,7 @@ export async function discoverFromDexScreener(
             ? { token: pair.baseToken, score: baseScore }
             : { token: pair.quoteToken, score: quoteScore };
 
-        if (!chosen.token?.address || chosen.score < 55) continue;
+        if (!chosen.token?.address || chosen.score < 80) continue;
 
         const address = chosen.token.address;
         const key = address.toLowerCase();
