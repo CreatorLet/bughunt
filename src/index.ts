@@ -191,7 +191,11 @@ async function discover(args: string[]): Promise<void> {
             (protocol.name ?? protocol.slug ?? "Unknown") +
             " — " +
             (addresses.length
-              ? "resolved " + addresses.length + " BSC address candidate(s)"
+              ? (hasCredibleDiscoveryTarget(addresses)
+                  ? "resolved "
+                  : "found ") +
+                addresses.length +
+                " BSC address candidate(s)"
               : "no BSC address found")
         );
       } catch (error) {
