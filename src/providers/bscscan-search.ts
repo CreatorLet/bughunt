@@ -8,7 +8,7 @@ import type {
 
 const BASE_URL = "https://bscscan.com/search";
 const ADDRESS_HREF_RE =
-  /href=["']\/(address|token)\/(0x[a-fA-F0-9]{40})[^"']*["'][^>]*>([\s\S]{0,900})</gi;
+  /\/(address|token)\/(0x[a-fA-F0-9]{40})[^"']*/gi;
 
 function normalize(value: string): string {
   return value
@@ -38,7 +38,28 @@ function termsFor(protocol: DefiLlamaProtocol): string[] {
     if (normalized) unique.set(normalized, value.trim());
   }
 
-  return [...unique.values()].slice(0, 3);
+  const roleTerms = [
+    "router",
+    "factory",
+    "vault",
+    "pool",
+    "staking",
+    "masterchef",
+    "farm",
+    "contract",
+    "sicklefactory"
+  ];
+
+  for (const base of [...unique.values()]) {
+    for (const role of roleTerms) {
+      unique.set(
+        normalize(base + " " + role),
+        base + " " + role
+      );
+    }
+  }
+
+  return [...unique.values()].slice(0, 12);
 }
 
 function roleForPath(pathType: string): ContractAddressRole {
@@ -130,8 +151,13 @@ export async function discoverFromBscScan(
     for (const match of html.matchAll(ADDRESS_HREF_RE)) {
       const pathType = match[1];
       const address = match[2];
-      const visibleContext = match[3] ?? "";
       if (!pathType || !address) continue;
+
+      const offset = match.index ?? 0;
+      const visibleContext = html.slice(
+        Math.max(0, offset - 80),
+        Math.min(html.length, offset + 980)
+      );
 
       const role = roleForPath(pathType);
       const score = scoreContext(protocol, visibleContext);
