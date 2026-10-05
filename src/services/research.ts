@@ -672,7 +672,7 @@ export async function researchContract(
               item.relation === "created-contract" ||
               item.relation === "interaction"
           )
-          .slice(0, 6)
+          .slice(0, 8)
           .map(async (item) => {
             const relatedMetadata = await getSourceCode(
               item.address
@@ -713,7 +713,7 @@ export async function researchContract(
               Boolean(item)
           )
         ],
-        1_200_000
+        config.aiSourceChars
       );
     } catch {
       // Graph enrichment is optional; the primary and implementation
