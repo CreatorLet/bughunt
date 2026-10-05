@@ -3,7 +3,7 @@ import type { DeepSeekAnalysis, DeepSeekUsage } from "../types.js";
 
 const BASE_URL = "https://api.deepseek.com";
 const MODEL = "deepseek-flash";
-const DEFAULT_MAX_SOURCE_CHARS = 45000;
+const DEFAULT_MAX_SOURCE_CHARS = 600000;
 const MAX_OUTPUT_TOKENS = 6500;
 
 interface DeepSeekResponse {
@@ -61,7 +61,8 @@ function buildSystemPrompt(compactRetry: boolean): string {
     "You are Bughunt's smart-contract security researcher.",
     "Target chain: BSC (chainId 56).",
     "Review only the supplied source excerpt and runtime context.",
-    "The source may be a focused excerpt rather than the complete contract; do not infer omitted code as fact.",
+    "The supplied source may contain several related contracts and may be a focused excerpt when it exceeds the source budget; do not infer omitted code as fact.",
+    "Treat cross-contract interactions as first-class evidence when the supplied bundle supports them.",
     ...mode,
     "Reason about authorization, state transitions, accounting, token transfers, callbacks, external calls, oracle assumptions, signatures, upgradeability, initialization, rounding, precision, price manipulation, MEV-sensitive logic, denial of service, governance, and cross-function interactions.",
     "For every direct vulnerability, identify an attacker path that does not assume control of an already-privileged account.",
@@ -81,18 +82,12 @@ function buildSystemPrompt(compactRetry: boolean): string {
   ].join(" ");
 }
 
-function stripComments(source: string): string {
-  return source
-    .replace(/\/\/[^\n\r]*/g, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "");
-}
-
-function buildFocusedSource(
+remove comment strippingfunction buildFocusedSource(
   source: string,
   context: Record<string, unknown> | undefined,
   maxChars: number
 ): { source: string; coverage: string } {
-  const cleaned = stripComments(source);
+  const cleaned = source;
 
   if (cleaned.length <= maxChars) {
     return {
