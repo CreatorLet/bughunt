@@ -941,13 +941,11 @@ export async function discoverBscContractAddresses(
     try {
       detail = await getProtocol(protocol.slug);
 
-      if (candidates.length < 2) {
-        collectAddressStrings(
-          detail,
-          "protocol",
-          candidates
-        );
-      }
+      collectAddressStrings(
+        detail,
+        "protocol",
+        candidates
+      );
     } catch {
       // Keep other discovery sources alive.
     }
@@ -968,12 +966,12 @@ export async function discoverBscContractAddresses(
 
   const graphSeeds = ranked
     .filter((item) => item.role !== "token" && item.score >= 65)
-    .slice(0, 2);
+    .slice(0, 4);
 
   if (graphSeeds.length) {
     const graphGroups = await Promise.all(
       graphSeeds.map((seed) =>
-        expandAddressGraph(seed.address, 12).catch(() => ({
+        expandAddressGraph(seed.address, 20).catch(() => ({
           candidates: []
         }))
       )
