@@ -377,6 +377,96 @@ function collectAddressStrings(
   }
 }
 
+async function discoverFromDefiLlamaAdapter(
+  protocol: DefiLlamaProtocol
+): Promise<ContractAddressCandidate[]> {
+  const modulePath =
+    typeof protocol.module === "string"
+      ? protocol.module.trim().replace(/^\/+/, "")
+      : "";
+
+  if (!modulePath) return [];
+
+  const candidates: ContractAddressCandidate[] = [];
+  const urls = [
+    "https://raw.githubusercontent.com/DefiLlama/DefiLlama-Adapters/main/projects/" +
+      modulePath,
+    "https://raw.githubusercontent.com/DefiLlama/DefiLlama-Adapters/master/projects/" +
+      modulePath
+  ];
+
+  for (const url of urls) {
+    try {
+      const response = await fetchWithTimeout(
+        url,
+        {
+          headers: {
+            accept: "text/plain",
+            "user-agent": "bughunt-researcher"
+          }
+        }
+      );
+
+      if (!response.ok) continue;
+
+      const source = (await response.text()).slice(
+        0,
+        500_000
+      );
+
+      for (const match of source.matchAll(ADDRESS_RE)) {
+        const offset = match.index ?? 0;
+
+        if (!isBscAddressContext(source, offset)) {
+          continue;
+        }
+
+        const context = source.slice(
+          Math.max(0, offset - 520),
+          Math.min(source.length, offset + 260)
+        );
+
+        const lower = context.toLowerCase();
+        const role = roleFromContext(
+          modulePath + " " + context
+        );
+
+        let score = 90;
+
+        if (/\bbsc\b/.test(lower)) score += 6;
+        if (
+          /(router|factory|vault|pool|gauge|masterchef|staking|proxy|implementation|registry)/.test(
+            lower
+          )
+        ) {
+          score += 4;
+        }
+
+        candidates.push({
+          address: match[0],
+          source: "defillama-adapter",
+          role: role === "related" ? "core" : role,
+          score: Math.min(100, score),
+          file: modulePath,
+          evidence:
+            "DeFiLlama adapter " +
+            modulePath +
+            " BSC context: " +
+            context.replace(/\s+/g, " ").slice(0, 320)
+        });
+      }
+
+      if (candidates.length) {
+        break;
+      }
+    } catch {
+      // Try the next adapter branch.
+    }
+  }
+
+  return uniqueAddresses(candidates).slice(0, 12);
+}
+
 function githubFileScore(
   file: string,
   context: string
@@ -760,6 +850,17 @@ export async function discoverBscContractAddresses(
 ): Promise<ContractAddressCandidate[]> {
   const candidates: ContractAddressCandidate[] =
     rawProtocolAddresses(protocol);
+
+  if (!candidates.some(
+    (item) =>
+      (item.role === "core" ||
+        item.role === "implementation") &&
+      item.score >= 85
+  )) {
+    candidates.push(
+      ...(await discoverFromDefiLlamaAdapter(protocol))
+    );
+  }
 
   if (candidates.length < 2 && protocol.slug) {
     try {
