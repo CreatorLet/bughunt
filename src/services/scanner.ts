@@ -12,6 +12,7 @@ import type {
   DefiLlamaProtocol,
   ScanCandidate
 } from "../types.js";
+import { buildSourceBundle } from "./source-bundle.js";
 
 async function mapWithConcurrency<T, R>(
   items: T[],
@@ -146,7 +147,21 @@ function compactContract(
     goPlusError: report.goPlusError,
     rugpullError: report.rugpullError,
     rugpullSignals: report.rugpullSignals ?? null,
-    aiAnalysis: report.aiAnalysis ?? null
+    aiAnalysis: report.aiAnalysis ?? null,
+    sourceBundle: report.sourceBundle
+      ? {
+          sourceCharacters:
+            report.sourceBundle.sourceCharacters,
+          coverage:
+            report.sourceBundle.coverage,
+          contracts:
+            report.sourceBundle.contracts,
+          files:
+            report.sourceBundle.files,
+          contractNames:
+            report.sourceBundle.contractNames
+        }
+      : null
   };
 }
 
@@ -499,7 +514,7 @@ export async function runBscScan(
   const protocols = await listBscProtocols(
     minTvl,
     maxTvl,
-    limit
+    0
   );
 
   const candidates: ScanCandidate[] =
@@ -569,7 +584,7 @@ export async function runBscScan(
         const addressesToResearch =
           candidate.addressCandidates.slice(
             0,
-            Math.min(4, candidate.addressCandidates.length)
+            Math.min(8, candidate.addressCandidates.length)
           );
 
         const researched = await mapWithConcurrency(
@@ -636,6 +651,35 @@ export async function runBscScan(
 
         const selectedContract = selected.report;
 
+        const bundleInputs = valid
+          .slice()
+          .sort(
+            (a, b) =>
+              discoverySelectionScore(
+                b.addressCandidate.role,
+                b.addressCandidate.score,
+                b.report
+              ) -
+              discoverySelectionScore(
+                a.addressCandidate.role,
+                a.addressCandidate.score,
+                a.report
+              )
+          )
+          .map((item) => ({
+            address: item.report.address,
+            contractName: item.report.contractName,
+            role: item.addressCandidate.role,
+            relation: item.addressCandidate.relation,
+            report: item.report
+          }));
+
+        selectedContract.sourceBundle =
+          buildSourceBundle(
+            bundleInputs,
+            1_200_000
+          );
+
         candidate.contract = selectedContract;
 
         console.log(
@@ -680,6 +724,11 @@ export async function runBscScan(
       candidate.screenScore = scoreCandidate(candidate);
       return candidate;
     },
+    {
+      stopAfterSuccess: limit,
+      isSuccess: (result) =>
+        Boolean(result.address && result.contract)
+    }
   );
 
   const processed = new Map(
@@ -709,6 +758,35 @@ export async function runBscScan(
     0,
     candidates.length,
     ...processedCandidates
+  );
+
+  const usableCandidates = candidates.filter(
+    (candidate) =>
+      Boolean(candidate.address && candidate.contract)
+  );
+
+  const allowedUsableKeys = new Set(
+    usableCandidates
+      .slice(0, limit)
+      .map(
+        (candidate) =>
+          candidate.protocolName + "|" + candidate.slug
+      )
+  );
+
+  const trimmedCandidates = candidates.filter(
+    (candidate) =>
+      !candidate.address ||
+      !candidate.contract ||
+      allowedUsableKeys.has(
+        candidate.protocolName + "|" + candidate.slug
+      )
+  );
+
+  candidates.splice(
+    0,
+    candidates.length,
+    ...trimmedCandidates
   );
 
   const sortedForAi = candidates
@@ -787,7 +865,9 @@ export async function runBscScan(
         await analyzeWithDeepSeek({
           address: contract.address,
           contractName: contract.contractName,
-          source: contract.sourceCode,
+          source:
+            contract.sourceBundle?.source ??
+            contract.sourceCode,
           maxSourceChars: config.aiSourceChars,
           heuristicFindings:
             contract.heuristics,
