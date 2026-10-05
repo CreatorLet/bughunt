@@ -113,9 +113,9 @@ async function discover(args: string[]): Promise<void> {
   );
 
   console.log(
-    "Selected TVL-ranked protocols: " +
+    "TVL-ranked BSC candidates in range: " +
       protocols.length +
-      " (unresolved protocols remain in the report)"
+      " (searching until the requested usable target quota is met)"
   );
 
   const results: Array<{
